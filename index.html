@@ -4,14 +4,6 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>AWS GROUP · Gestión Integral</title>
-<link rel="manifest" href="manifest.json">
-<link rel="icon" type="image/png" sizes="32x32" href="favicon-32.png">
-<link rel="icon" type="image/png" sizes="64x64" href="favicon-64.png">
-<link rel="apple-touch-icon" href="icon-180.png">
-<meta name="theme-color" content="#4E0E23">
-<meta name="apple-mobile-web-app-capable" content="yes">
-<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-<meta name="apple-mobile-web-app-title" content="AWS GROUP">
 <link href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@400;700;900&family=DM+Sans:wght@300;400;500;600&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
 <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
 <style>
@@ -305,11 +297,6 @@ tr:hover td{background:var(--cream);}
 .ship-row b{color:var(--ink);text-align:right;max-width:65%;}
 .ship-row span{color:var(--muted);}
 
-/* ── PEGADO INTELIGENTE ── */
-.field.sp-uncertain input,.field.sp-uncertain select{border-color:#E0A100;background:#FFF8E5;}
-.sp-warn-item{font-size:.76rem;color:#8A4F00;background:#FFF3CD;border-radius:8px;padding:6px 10px;margin-bottom:4px;}
-#sp-match-select{border:1.5px solid var(--border);border-radius:8px;padding:8px 10px;font-size:.83rem;font-family:"DM Sans",sans-serif;color:var(--ink);background:var(--cream);outline:none;}
-
 @media print{
   body *{visibility:hidden;}
   .print-area, .print-area *{visibility:visible;}
@@ -489,7 +476,6 @@ function json(obj) { return ContentService.createTextOutput(JSON.stringify(obj))
     <button class="btn btn-ghost" onclick="openUrlModal()" title="Cambiar URL">🔗</button>
     <button class="btn btn-gold" onclick="openDepModal()">+ Depósito</button>
     <button class="btn btn-ghost" onclick="openRetModal()">+ Retiro</button>
-    <button class="btn btn-ghost" onclick="openSmartPasteModal()" title="Pegar mensaje de WhatsApp y autocompletar">📋 Pegado Inteligente</button>
     <button class="btn btn-ghost" onclick="openReporteModal()">📋 Reporte</button>
   </div>
 </header>
@@ -983,71 +969,6 @@ function json(obj) { return ContentService.createTextOutput(JSON.stringify(obj))
       <button class="btn" style="color:var(--ink);border:1.5px solid var(--border);" onclick="closeShippingModal()">Cerrar</button>
       <button class="btn btn-gold" onclick="saveShipping()">💾 Guardar</button>
       <button class="btn btn-wine" onclick="printShipping()">🖨️ Imprimir</button>
-    </div>
-  </div>
-</div>
-
-<!-- ══ MODAL PEGADO INTELIGENTE ══ -->
-<div class="modal-overlay" id="smartPasteModalOverlay">
-  <div class="modal" style="max-width:720px;">
-    <div class="modal-header"><span class="modal-title">📋 Pegado Inteligente</span><button class="modal-close" onclick="closeSmartPasteModal()">✕</button></div>
-    <div class="modal-body">
-
-      <div id="spStep1">
-        <div class="field">
-          <label>Pegá el mensaje tal cual (dirección + línea de "sacar, pagó…")</label>
-          <textarea id="sp-raw" rows="9" placeholder="Ryan Schuering&#10;255 Evernia Street&#10;Apartment 1306&#10;West Palm beach, Fl 34401&#10;&#10;Viña Alicia, sacar cuando lleguen, pagó Zelle" style="font-family:'DM Mono',monospace;font-size:.8rem;"></textarea>
-        </div>
-        <div style="text-align:right;margin-top:10px;">
-          <button class="btn btn-gold" onclick="runSmartPasteInterpret()">🔎 Interpretar</button>
-        </div>
-      </div>
-
-      <div id="spStep2" style="display:none;">
-        <div id="spMatchBox" style="margin-bottom:14px;">
-          <div class="pedido-label" style="margin-bottom:6px;">¿A qué pedido pendiente corresponde?</div>
-          <select id="sp-match-select" style="width:100%;"></select>
-          <div id="spMatchHint" style="font-size:.7rem;color:var(--muted);margin-top:4px;"></div>
-        </div>
-
-        <div class="field-row">
-          <div class="field"><label>Forma de pago</label>
-            <select id="sp-pago">
-              <option value="">— sin identificar —</option>
-              <option value="cash">💵 Cash</option>
-              <option value="paypal">🅿 PayPal</option>
-              <option value="zelle">⚡ Zelle</option>
-              <option value="cc30">📋 CC 30d</option>
-            </select>
-          </div>
-          <div class="field"><label>Botellas</label>
-            <input id="sp-botellas" type="number" min="0">
-          </div>
-        </div>
-
-        <div class="pedido-label" style="margin:12px 0 6px;">Shipping Request</div>
-        <div class="field-row">
-          <div class="field"><label>Nombre del destinatario</label><input id="sp-nombre"></div>
-          <div class="field"><label>Teléfono</label><input id="sp-telefono"></div>
-        </div>
-        <div class="field-row">
-          <div class="field" style="grid-column:1/-1;"><label>Dirección</label><input id="sp-direccion"></div>
-        </div>
-        <div class="field-row">
-          <div class="field"><label>Código Postal</label><input id="sp-cp"></div>
-          <div class="field"><label>País</label><input id="sp-pais"></div>
-        </div>
-        <div class="field-row">
-          <div class="field" style="grid-column:1/-1;"><label>Email</label><input id="sp-email"></div>
-        </div>
-        <div id="spWarnings" style="margin-top:8px;"></div>
-      </div>
-
-    </div>
-    <div class="modal-footer">
-      <button class="btn" style="color:var(--ink);border:1.5px solid var(--border);" onclick="closeSmartPasteModal()">Cancelar</button>
-      <button class="btn btn-ghost" id="spBackBtn" style="display:none;" onclick="smartPasteBack()">← Corregir texto</button>
-      <button class="btn btn-gold" id="spConfirmBtn" style="display:none;" onclick="confirmSmartPaste()">✅ Confirmar y guardar</button>
     </div>
   </div>
 </div>
@@ -2624,31 +2545,28 @@ function exportStockCSV(){
   var pago_label = {cash:'Efectivo (Cash)',paypal:'PayPal',zelle:'Zelle',cc30:'Cta Corriente 30d',pendiente:'Pendiente'};
   var prio_label = {1:'Comex Doc (URGENTE)',2:'Comex Vino',3:'Turismo/Feria/Ecomm',4:'Pendiente pago'};
   var prio_color = {1:'FFFFE0B2',2:'FFBBDEFB',3:'FFC8E6C9',4:'FFF5F5F5'};
+  var subpendiente_color = 'FFFFF9C4'; // amarillo claro para subpedidos pendientes
 
-  // Build Excel XML (SpreadsheetML) - opens perfectly in Excel with formatting
   var xml = '<?xml version="1.0" encoding="UTF-8"?><?mso-application progid="Excel.Sheet"?>';
   xml += '<Workbook xmlns="urn:schemas-microsoft-com:office:spreadsheet" xmlns:ss="urn:schemas-microsoft-com:office:spreadsheet">';
   xml += '<Styles>';
-  // Header style
   xml += '<Style ss:ID="h"><Font ss:Bold="1" ss:Color="#FFFFFF" ss:Size="10"/><Interior ss:Color="#7B1C3A" ss:Pattern="Solid"/><Alignment ss:Horizontal="Center"/></Style>';
-  // Priority styles
   xml += '<Style ss:ID="p1"><Interior ss:Color="#FFE0B2" ss:Pattern="Solid"/><Font ss:Bold="1"/></Style>';
   xml += '<Style ss:ID="p2"><Interior ss:Color="#BBDEFB" ss:Pattern="Solid"/><Font ss:Bold="1"/></Style>';
   xml += '<Style ss:ID="p3"><Interior ss:Color="#C8E6C9" ss:Pattern="Solid"/></Style>';
   xml += '<Style ss:ID="p4"><Interior ss:Color="#F5F5F5" ss:Pattern="Solid"/></Style>';
-  // Date style
-  xml += '<Style ss:ID="d"><NumberFormat ss:Format="DD/MM/YYYY"/></Style>';
-  // Normal
-  xml += '<Style ss:ID="n"><Alignment ss:WrapText="1"/></Style>';
+  xml += '<Style ss:ID="sub"><Interior ss:Color="#FFF9C4" ss:Pattern="Solid"/></Style>';
+  xml += '<Style ss:ID="subok"><Interior ss:Color="#E8F5E9" ss:Pattern="Solid"/></Style>';
   xml += '</Styles>';
   xml += '<Worksheet ss:Name="Stock Deposito">';
   xml += '<Table>';
+
   // Column widths
-  var widths = [100,180,100,100,100,70,120,100,60,120,200];
+  var widths = [130,180,100,100,100,70,150,100,60,100,150,200];
   widths.forEach(function(w){ xml += '<Column ss:Width="'+w+'"/>'; });
 
   // Header row
-  var cols = ['Prioridad','Cliente','Negocio','Subtipo','Transporte','Botellas','Forma de Pago','Fecha Ingreso','Días','Destino','Notas'];
+  var cols = ['Prioridad','Cliente','Negocio','Subtipo','Transporte','Botellas','Forma de Pago','Fecha Ingreso','Días','Destino','Destinatario','Notas'];
   xml += '<Row ss:Height="20">';
   cols.forEach(function(c){ xml += '<Cell ss:StyleID="h"><Data ss:Type="String">'+c+'</Data></Cell>'; });
   xml += '</Row>';
@@ -2659,20 +2577,51 @@ function exportStockCSV(){
     var d = daysDiff(i.fechaIngreso);
     var styleId = 'p'+p;
     var fechaStr = i.fechaIngreso ? String(i.fechaIngreso).slice(0,10) : '';
+    var pagoMain = pago_label[i.pago] || i.pago || '';
 
-    xml += '<Row ss:Height="18">';
-    xml += '<Cell ss:StyleID="'+styleId+'"><Data ss:Type="String">'+(prio_label[p]||'P'+p)+'</Data></Cell>';
-    xml += '<Cell ss:StyleID="'+styleId+'"><Data ss:Type="String">'+(i.cliente||'')+'</Data></Cell>';
-    xml += '<Cell ss:StyleID="'+styleId+'"><Data ss:Type="String">'+(i.negocio||'')+'</Data></Cell>';
-    xml += '<Cell ss:StyleID="'+styleId+'"><Data ss:Type="String">'+(i.subtipo||'')+'</Data></Cell>';
-    xml += '<Cell ss:StyleID="'+styleId+'"><Data ss:Type="String">'+(i.transporte||'')+'</Data></Cell>';
-    xml += '<Cell ss:StyleID="'+styleId+'"><Data ss:Type="String">'+(i.botellas||'')+'</Data></Cell>';
-    xml += '<Cell ss:StyleID="'+styleId+'"><Data ss:Type="String">'+(pago_label[i.pago]||i.pago||'')+'</Data></Cell>';
-    xml += '<Cell ss:StyleID="'+styleId+'"><Data ss:Type="String">'+fechaStr+'</Data></Cell>';
-    xml += '<Cell ss:StyleID="'+styleId+'"><Data ss:Type="Number">'+d+'</Data></Cell>';
-    xml += '<Cell ss:StyleID="'+styleId+'"><Data ss:Type="String">'+(i.destino||'')+'</Data></Cell>';
-    xml += '<Cell ss:StyleID="'+styleId+'"><Data ss:Type="String">'+(i.notas||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;')+'</Data></Cell>';
-    xml += '</Row>';
+    var hasSubs = i.pedidos && i.pedidos.length > 0;
+
+    if(!hasSubs){
+      // Single row — no subpedidos
+      xml += '<Row ss:Height="18">';
+      xml += '<Cell ss:StyleID="'+styleId+'"><Data ss:Type="String">'+(prio_label[p]||'P'+p)+'</Data></Cell>';
+      xml += '<Cell ss:StyleID="'+styleId+'"><Data ss:Type="String">'+(i.cliente||'')+'</Data></Cell>';
+      xml += '<Cell ss:StyleID="'+styleId+'"><Data ss:Type="String">'+(i.negocio||'')+'</Data></Cell>';
+      xml += '<Cell ss:StyleID="'+styleId+'"><Data ss:Type="String">'+(i.subtipo||'')+'</Data></Cell>';
+      xml += '<Cell ss:StyleID="'+styleId+'"><Data ss:Type="String">'+(i.transporte||'')+'</Data></Cell>';
+      xml += '<Cell ss:StyleID="'+styleId+'"><Data ss:Type="String">'+(i.botellas||'')+'</Data></Cell>';
+      xml += '<Cell ss:StyleID="'+styleId+'"><Data ss:Type="String">'+pagoMain+'</Data></Cell>';
+      xml += '<Cell ss:StyleID="'+styleId+'"><Data ss:Type="String">'+fechaStr+'</Data></Cell>';
+      xml += '<Cell ss:StyleID="'+styleId+'"><Data ss:Type="Number">'+d+'</Data></Cell>';
+      xml += '<Cell ss:StyleID="'+styleId+'"><Data ss:Type="String">'+(i.destino||'')+'</Data></Cell>';
+      xml += '<Cell ss:StyleID="'+styleId+'"><Data ss:Type="String"></Data></Cell>';
+      xml += '<Cell ss:StyleID="'+styleId+'"><Data ss:Type="String">'+(i.notas||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;')+'</Data></Cell>';
+      xml += '</Row>';
+    } else {
+      // One row per subpedido
+      i.pedidos.forEach(function(ped, pidx){
+        if(ped.salida) return; // skip already shipped
+        var pedPago = pago_label[ped.pago||'pendiente'] || ped.pago || 'Pendiente';
+        var isPendiente = !ped.pago || ped.pago === 'pendiente';
+        var subStyle = isPendiente ? 'sub' : 'subok';
+        var prioStr = (prio_label[p]||'P'+p) + ' · Sub '+(pidx+1);
+
+        xml += '<Row ss:Height="18">';
+        xml += '<Cell ss:StyleID="'+subStyle+'"><Data ss:Type="String">'+prioStr+'</Data></Cell>';
+        xml += '<Cell ss:StyleID="'+subStyle+'"><Data ss:Type="String">'+(i.cliente||'')+'</Data></Cell>';
+        xml += '<Cell ss:StyleID="'+subStyle+'"><Data ss:Type="String">'+(ped.negocio||i.negocio||'')+'</Data></Cell>';
+        xml += '<Cell ss:StyleID="'+subStyle+'"><Data ss:Type="String">'+(i.subtipo||'vino')+'</Data></Cell>';
+        xml += '<Cell ss:StyleID="'+subStyle+'"><Data ss:Type="String">'+(ped.transportistaSalida||i.transporte||'')+'</Data></Cell>';
+        xml += '<Cell ss:StyleID="'+subStyle+'"><Data ss:Type="String">'+(ped.botellas||'')+'</Data></Cell>';
+        xml += '<Cell ss:StyleID="'+subStyle+'"><Data ss:Type="String">'+pedPago+'</Data></Cell>';
+        xml += '<Cell ss:StyleID="'+subStyle+'"><Data ss:Type="String">'+fechaStr+'</Data></Cell>';
+        xml += '<Cell ss:StyleID="'+subStyle+'"><Data ss:Type="Number">'+d+'</Data></Cell>';
+        xml += '<Cell ss:StyleID="'+subStyle+'"><Data ss:Type="String">'+(ped.destino||i.destino||'')+'</Data></Cell>';
+        xml += '<Cell ss:StyleID="'+subStyle+'"><Data ss:Type="String">'+(ped.destinatario||'')+'</Data></Cell>';
+        xml += '<Cell ss:StyleID="'+subStyle+'"><Data ss:Type="String">'+(ped.notas||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;')+'</Data></Cell>';
+        xml += '</Row>';
+      });
+    }
   });
 
   xml += '</Table></Worksheet></Workbook>';
@@ -2685,8 +2634,9 @@ function exportStockCSV(){
   a.download = 'AWS_Stock_'+fecha+'.xls';
   a.click();
   URL.revokeObjectURL(url);
-  showToast('Excel descargado con formato','success');
+  showToast('Excel descargado con subpedidos','success');
 }
+
 
 function exportStockWhatsapp(){
   var data = DEP.filter(function(i){ return !i.retirado; });
@@ -3224,233 +3174,6 @@ function printShipping(){
 }
 
 // ═══════════════════════════════════════
-//  PEGADO INTELIGENTE — parser de WhatsApp
-// ═══════════════════════════════════════
-function parseSmartPaste(raw){
-  let lines = raw.split('\n')
-    .map(l=>l.trim().replace(/^["“”'’]+|["“”'’]+$/g,'').trim())
-    .filter(l=>l);
-  const result = { clienteGuess:'', botellas:'', pago:'', pagoFound:false,
-    nombre:'', direccion:'', codigoPostal:'', pais:'', telefono:'', email:'', paisInferido:false };
-  const fullText = lines.join(' \n ');
-
-  const botMatch = fullText.match(/(\d+)\s*bot[a-z]*/i) || fullText.match(/(\d+)\s*bottles?/i);
-  if(botMatch) result.botellas = botMatch[1]||'';
-
-  const pagoMap = [
-    {re:/zelle/i, val:'zelle'}, {re:/paypal/i, val:'paypal'},
-    {re:/\bcash\b|efectivo/i, val:'cash'}, {re:/cc\s?30|corriente/i, val:'cc30'},
-  ];
-  for(const p of pagoMap){ if(p.re.test(fullText)){ result.pago=p.val; result.pagoFound=true; break; } }
-
-  const emailMatch = fullText.match(/[\w.+-]+@[\w-]+\.[\w.-]+/);
-  if(emailMatch) result.email = emailMatch[0];
-
-  // Phone: check line by line (not the joined text) so it can't span across lines/other fields
-  let phoneMatch = null;
-  for(const l of lines){
-    const m = l.match(/(\+?\d[\d\s.\-()]{7,}\d)/);
-    if(m && m[0].replace(/[^\d]/g,'').length>=7){ phoneMatch = m; break; }
-  }
-  if(phoneMatch) result.telefono = phoneMatch[0].trim();
-
-  let instructionIdx = lines.findIndex(l=>/sacar/i.test(l));
-  let instructionLine = instructionIdx>=0 ? lines[instructionIdx] : '';
-  if(instructionLine){
-    let cl = instructionLine.replace(/\d+\s*bot[a-z]*/i,'').replace(/\d+\s*bottles?/i,'');
-    const sacarIdx = cl.toLowerCase().indexOf('sacar');
-    if(sacarIdx>=0) cl = cl.slice(0, sacarIdx);
-    result.clienteGuess = cl.replace(/,\s*$/,'').trim();
-  }
-
-  let candidateLines = lines.filter((l,idx)=>{
-    if(idx===instructionIdx) return false;
-    if(/^\d+\s*bot[a-z]*$/i.test(l)) return false;              // standalone "12 bottles" line
-    if(/^[A-Za-zÀ-ÿ]+\s*\([A-Za-zÀ-ÿ\s]+\)$/.test(l)) return false; // "Grupo (Nombre real)" sender label
-    if(emailMatch && l.includes(emailMatch[0])) return false;
-    if(phoneMatch && l.includes(phoneMatch[0])) return false;
-    return true;
-  });
-
-  const countryWords = ['usa','united states','estados unidos'];
-  let countryIdx = candidateLines.findIndex(l=>countryWords.includes(l.toLowerCase()));
-  if(countryIdx>=0){ result.pais='Estados Unidos'; candidateLines.splice(countryIdx,1); }
-
-  let nameIdx = candidateLines.findIndex(l => /^([A-ZÁÉÍÓÚÑ][a-zà-ÿ'’-]+\s*){2,4}$/.test(l) && !/\d/.test(l));
-  if(nameIdx>=0){ result.nombre = candidateLines[nameIdx]; candidateLines.splice(nameIdx,1); }
-
-  const seen = new Set(); const addrLines=[];
-  candidateLines.forEach(l=>{ const k=l.toLowerCase(); if(!seen.has(k)){ seen.add(k); addrLines.push(l); } });
-
-  let zipFound='';
-  const addrLinesClean = addrLines.map(l=>{
-    const zm = l.match(/\b(\d{5})(-\d{4})?\b/);
-    if(zm && !zipFound){ zipFound=zm[1]; return l.replace(zm[0],'').replace(/,\s*$/,'').trim(); }
-    return l;
-  });
-  result.codigoPostal = zipFound;
-  result.direccion = addrLinesClean.filter(l=>l).join(', ');
-
-  if(!result.pais){
-    const usStates = /\b(AL|AK|AZ|AR|CA|CO|CT|DE|FL|GA|HI|ID|IL|IN|IA|KS|KY|LA|ME|MD|MA|MI|MN|MS|MO|MT|NE|NV|NH|NJ|NM|NY|NC|ND|OH|OK|OR|PA|RI|SC|SD|TN|TX|UT|VT|VA|WA|WV|WI|WY)\b/;
-    if(zipFound || usStates.test(result.direccion) || /arizona|florida|texas|california|wisconsin/i.test(result.direccion)){
-      result.pais='Estados Unidos'; result.paisInferido=true;
-    }
-  }
-  return result;
-}
-
-function normText(s){
-  return String(s||'').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'').replace(/[^a-z0-9\s]/g,'').trim();
-}
-function nameSimilarity(a,b){
-  if(!a||!b) return 0;
-  a=normText(a); b=normText(b);
-  if(!a||!b) return 0;
-  if(a===b) return 1;
-  if(a.includes(b)||b.includes(a)) return 0.85;
-  const aw=a.split(/\s+/), bw=b.split(/\s+/);
-  const common = aw.filter(w=>bw.includes(w)).length;
-  return common / Math.max(aw.length,bw.length);
-}
-function findPendingMatches(nameGuess){
-  const out=[];
-  DEP.filter(d=>!d.retirado).forEach(item=>{
-    const hasSubs = item.pedidos && item.pedidos.length>0;
-    if(!hasSubs){
-      if(!isPagoPaid(item.pago)){
-        out.push({depId:item.id, subIdx:null, label:`${item.cliente} — Stock (${item.botellas||'—'} bot.)`, score:nameSimilarity(item.cliente,nameGuess)});
-      }
-    } else {
-      item.pedidos.forEach((ped,idx)=>{
-        if(ped.salida) return;
-        if(!isPagoPaid(ped.pago)){
-          out.push({depId:item.id, subIdx:idx, label:`${item.cliente} · sub-pedido ${idx+1}${ped.destinatario?' — '+ped.destinatario:''}`, score:nameSimilarity(item.cliente,nameGuess)});
-        }
-      });
-    }
-  });
-  out.sort((a,b)=>b.score-a.score);
-  return out;
-}
-
-// ═══════════════════════════════════════
-//  PEGADO INTELIGENTE — modal
-// ═══════════════════════════════════════
-let spParsed=null, spMatches=[];
-
-function openSmartPasteModal(){
-  document.getElementById('sp-raw').value='';
-  document.getElementById('spStep1').style.display='block';
-  document.getElementById('spStep2').style.display='none';
-  document.getElementById('spBackBtn').style.display='none';
-  document.getElementById('spConfirmBtn').style.display='none';
-  document.getElementById('smartPasteModalOverlay').classList.add('open');
-}
-function closeSmartPasteModal(){
-  document.getElementById('smartPasteModalOverlay').classList.remove('open');
-}
-function smartPasteBack(){
-  document.getElementById('spStep1').style.display='block';
-  document.getElementById('spStep2').style.display='none';
-  document.getElementById('spBackBtn').style.display='none';
-  document.getElementById('spConfirmBtn').style.display='none';
-}
-
-function runSmartPasteInterpret(){
-  const raw = document.getElementById('sp-raw').value;
-  if(!raw.trim()){ showToast('Pegá un mensaje primero','error'); return; }
-  spParsed = parseSmartPaste(raw);
-  spMatches = findPendingMatches(spParsed.clienteGuess);
-
-  const sel = document.getElementById('sp-match-select');
-  if(spMatches.length){
-    sel.innerHTML = spMatches.slice(0,8).map((m,i)=>
-      `<option value="${m.depId}||${m.subIdx===null?'null':m.subIdx}" ${i===0 && m.score>=0.5 ? 'selected':''}>${m.label}${m.score>=0.5?' ✓ probable':''}</option>`
-    ).join('') + `<option value="">— ninguno, elegir a mano —</option>`;
-    document.getElementById('spMatchHint').textContent = spParsed.clienteGuess
-      ? `Detectamos "${spParsed.clienteGuess}" en el mensaje — confirmá que sea el pedido correcto antes de guardar.`
-      : 'No pudimos identificar el nombre del cliente en el mensaje — elegí de la lista.';
-  } else {
-    sel.innerHTML = `<option value="">No hay pedidos pendientes de pago en este momento</option>`;
-    document.getElementById('spMatchHint').textContent = '';
-  }
-
-  document.getElementById('sp-pago').value      = spParsed.pago||'';
-  document.getElementById('sp-botellas').value  = spParsed.botellas||'';
-  document.getElementById('sp-nombre').value    = spParsed.nombre||'';
-  document.getElementById('sp-direccion').value = spParsed.direccion||'';
-  document.getElementById('sp-cp').value        = spParsed.codigoPostal||'';
-  document.getElementById('sp-pais').value      = spParsed.pais||'';
-  document.getElementById('sp-telefono').value  = spParsed.telefono||'';
-  document.getElementById('sp-email').value     = spParsed.email||'';
-
-  const warnList=[];
-  const setUncertain=(id,uncertain)=>document.getElementById(id).closest('.field').classList.toggle('sp-uncertain',uncertain);
-  setUncertain('sp-pago', !spParsed.pagoFound);
-  if(!spParsed.pagoFound) warnList.push('⚠️ No identificamos la forma de pago — elegila manualmente.');
-  setUncertain('sp-nombre', !spParsed.nombre);
-  if(!spParsed.nombre) warnList.push('⚠️ No identificamos el nombre del destinatario.');
-  setUncertain('sp-direccion', !spParsed.direccion);
-  if(!spParsed.direccion) warnList.push('⚠️ No identificamos la dirección completa.');
-  setUncertain('sp-cp', !spParsed.codigoPostal);
-  setUncertain('sp-email', !spParsed.email);
-  setUncertain('sp-telefono', !spParsed.telefono);
-  setUncertain('sp-pais', !spParsed.pais);
-  if(spParsed.paisInferido) warnList.push('ℹ️ País inferido automáticamente a partir de la dirección — confirmalo.');
-  if(!spMatches.length) warnList.push('⚠️ No hay pedidos con pago pendiente para vincular en este momento.');
-  document.getElementById('spWarnings').innerHTML = warnList.map(w=>`<div class="sp-warn-item">${w}</div>`).join('');
-
-  document.getElementById('spStep1').style.display='none';
-  document.getElementById('spStep2').style.display='block';
-  document.getElementById('spBackBtn').style.display='inline-block';
-  document.getElementById('spConfirmBtn').style.display='inline-block';
-}
-
-async function confirmSmartPaste(){
-  const selVal = document.getElementById('sp-match-select').value;
-  if(!selVal){ showToast('Elegí a qué pedido corresponde antes de guardar','error'); return; }
-  const [depId, subIdxRaw] = selVal.split('||');
-  const subIdx = subIdxRaw==='null' ? null : parseInt(subIdxRaw);
-  const item = DEP.find(d=>String(d.id)===String(depId));
-  if(!item){ showToast('No se encontró el pedido','error'); return; }
-
-  const pago = document.getElementById('sp-pago').value;
-  const botellas = document.getElementById('sp-botellas').value;
-  const sh = {
-    nombre:       document.getElementById('sp-nombre').value.trim(),
-    direccion:    document.getElementById('sp-direccion').value.trim(),
-    codigoPostal: document.getElementById('sp-cp').value.trim(),
-    pais:         document.getElementById('sp-pais').value.trim(),
-    telefono:     document.getElementById('sp-telefono').value.trim(),
-    email:        document.getElementById('sp-email').value.trim(),
-  };
-
-  const btn = document.getElementById('spConfirmBtn');
-  btn.disabled=true; btn.innerHTML='<span class="spinner"></span>Guardando…';
-
-  try{
-    if(subIdx===null){
-      const pagoChanged = pago && pago!=='pendiente' && item.pago!==pago;
-      if(pago) await api({action:'update',target:'deposito',id:depId,field:'pago',value:pago});
-      if(pagoChanged) await api({action:'update',target:'deposito',id:depId,field:'fechaPago',value:today()});
-      if(botellas) await api({action:'update',target:'deposito',id:depId,field:'botellas',value:botellas});
-      await api({action:'update',target:'deposito',id:depId,field:'shipping',value:JSON.stringify(sh)});
-    } else {
-      if(!item.pedidos || !item.pedidos[subIdx]) throw new Error('sub no encontrado');
-      if(pago) item.pedidos[subIdx].pago = pago;
-      if(botellas) item.pedidos[subIdx].botellas = botellas;
-      item.pedidos[subIdx].shipping = sh;
-      await api({action:'update',target:'deposito',id:depId,field:'pedidos',value:JSON.stringify(item.pedidos)});
-    }
-    closeSmartPasteModal();
-    showToast('✅ Pedido actualizado con Shipping Request','success');
-    await loadAll();
-  }catch(e){ showToast('Error al guardar','error'); }
-  btn.disabled=false; btn.innerHTML='✅ Confirmar y guardar';
-}
-
-// ═══════════════════════════════════════
 //  VISTA PÚBLICA (escaneo del QR)
 // ═══════════════════════════════════════
 function checkPublicView(){
@@ -3512,13 +3235,6 @@ function renderPublicView(item, subIdx){
 
 // Run the public-view check on boot; if it's a scan, skip normal app rendering.
 checkPublicView();
-
-// Registrar service worker (necesario para que Chrome ofrezca instalar la app)
-if('serviceWorker' in navigator){
-  window.addEventListener('load', () => {
-    navigator.serviceWorker.register('sw.js').catch(()=>{});
-  });
-}
 </script>
 </body>
 </html>
