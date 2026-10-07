@@ -4,6 +4,14 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>AWS GROUP · Gestión Integral</title>
+<link rel="manifest" href="manifest.json">
+<link rel="icon" type="image/png" sizes="32x32" href="favicon-32.png">
+<link rel="icon" type="image/png" sizes="64x64" href="favicon-64.png">
+<link rel="apple-touch-icon" href="icon-180.png">
+<meta name="theme-color" content="#4E0E23">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="AWS GROUP">
 <link href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@400;700;900&family=DM+Sans:wght@300;400;500;600&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
 <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
 <style>
@@ -297,6 +305,11 @@ tr:hover td{background:var(--cream);}
 .ship-row b{color:var(--ink);text-align:right;max-width:65%;}
 .ship-row span{color:var(--muted);}
 
+/* ── PEGADO INTELIGENTE ── */
+.field.sp-uncertain input,.field.sp-uncertain select{border-color:#E0A100;background:#FFF8E5;}
+.sp-warn-item{font-size:.76rem;color:#8A4F00;background:#FFF3CD;border-radius:8px;padding:6px 10px;margin-bottom:4px;}
+#sp-match-select{border:1.5px solid var(--border);border-radius:8px;padding:8px 10px;font-size:.83rem;font-family:"DM Sans",sans-serif;color:var(--ink);background:var(--cream);outline:none;}
+
 @media print{
   body *{visibility:hidden;}
   .print-area, .print-area *{visibility:visible;}
@@ -343,6 +356,33 @@ tr:hover td{background:var(--cream);}
 .pv-footer{padding:16px 22px;border-top:1px solid var(--border);text-align:center;}
 .pv-footer a{color:var(--wine);font-weight:600;font-size:.82rem;text-decoration:none;}
 .pv-loading{text-align:center;padding:40px 20px;color:var(--muted);}
+
+/* ── MAPA DEPÓSITO ── */
+.mp-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:12px}
+@media(max-width:700px){.mp-grid{grid-template-columns:repeat(2,1fr)}}
+.mp-rack{background:#fff;border:2px solid var(--wine-dk);border-radius:12px;padding:8px;display:flex;flex-direction:column;gap:6px}
+.mp-rt{font-family:"Playfair Display",serif;font-weight:700;color:var(--wine);text-align:center}
+.mp-sh{min-height:84px;border:1.5px dashed var(--border);border-radius:8px;padding:5px;background:var(--ivory);cursor:pointer;transition:.15s}
+.mp-sh:hover{border-color:var(--gold)}
+.mp-ins{background:repeating-linear-gradient(45deg,#f1ebe2,#f1ebe2 8px,#ebe3d8 8px,#ebe3d8 16px)}
+.mp-ins .mp-b{outline:2px solid #C4A8FF}
+.mp-match{border:2px solid var(--gold);box-shadow:0 0 0 3px rgba(201,168,76,.35)}
+.mp-sl{font-size:.62rem;color:var(--muted);font-family:"DM Mono",monospace;margin-bottom:4px}
+.mp-bs{display:flex;flex-wrap:wrap;gap:4px}
+.mp-b{border-radius:6px;padding:4px 6px;color:#fff;font-size:.68rem;cursor:pointer;display:flex;flex-direction:column;animation:mpPop .3s}
+.mp-b small{opacity:.85;font-size:.58rem}
+.mp-ok{background:var(--green)}.mp-pe{background:var(--amber)}.mp-al{background:var(--red)}
+.mp-b.sel{outline:3px solid var(--gold);transform:translateY(-3px) scale(1.08)}
+@keyframes mpPop{from{transform:scale(.4);opacity:0}}
+.mp-x{color:var(--wine);cursor:pointer;text-decoration:underline;font-size:.8rem}
+.mp-leg{font-size:.74rem;color:var(--muted);margin-bottom:10px}
+.mp-scan{position:fixed;inset:0;background:rgba(0,0,0,.6);z-index:999;display:flex;align-items:center;justify-content:center;padding:16px}
+.mp-sc{background:#fff;border-radius:14px;padding:14px;max-width:420px;width:100%;display:flex;flex-direction:column;gap:10px}
+.mp-sc video{width:100%;border-radius:10px;background:#000;max-height:260px}
+.mp-sc input{flex:1;border:1.5px solid var(--border);border-radius:8px;padding:7px}
+.mp-res{padding:10px;border-radius:8px;background:var(--cream);font-size:.85rem}
+.mp-res.good{background:#E8F5EC;animation:mpPop .3s}.mp-res.bad{background:#FBE9EC}
+.mp-slots{display:flex;flex-wrap:wrap;gap:4px;margin-top:8px}
 </style>
 </head>
 <body>
@@ -476,6 +516,7 @@ function json(obj) { return ContentService.createTextOutput(JSON.stringify(obj))
     <button class="btn btn-ghost" onclick="openUrlModal()" title="Cambiar URL">🔗</button>
     <button class="btn btn-gold" onclick="openDepModal()">+ Depósito</button>
     <button class="btn btn-ghost" onclick="openRetModal()">+ Retiro</button>
+    <button class="btn btn-ghost" onclick="openSmartPasteModal()" title="Pegar mensaje de WhatsApp y autocompletar">📋 Pegado Inteligente</button>
     <button class="btn btn-ghost" onclick="openReporteModal()">📋 Reporte</button>
   </div>
 </header>
@@ -490,6 +531,7 @@ function json(obj) { return ContentService.createTextOutput(JSON.stringify(obj))
   <div class="sidebar-label">Depósito</div>
   <div class="sidebar-section">
     <div class="nav-item" onclick="showView('deposito',this)"><span class="nav-icon">📦</span>Stock<span class="nav-badge" id="badgeStock">0</span></div>
+    <div class="nav-item" onclick="showView('mapa',this)"><span class="nav-icon">🗺️</span>Mapa</div>
     <div class="nav-item" onclick="showView('prioridad',this)"><span class="nav-icon">🚨</span>Cola Prioridad<span class="nav-badge" id="badgePrio">0</span></div>
     <div class="nav-item" onclick="showView('egreso',this)"><span class="nav-icon">✅</span>Registrar Salida</div>
     <div class="nav-item" onclick="showView('historial',this)"><span class="nav-icon">📋</span>Historial</div>
@@ -537,6 +579,17 @@ function json(obj) { return ContentService.createTextOutput(JSON.stringify(obj))
       <div class="today-list" id="depPrioList"></div>
     </div>
   </div>
+</div>
+
+<!-- MAPA DEPOSITO -->
+<div id="view-mapa" class="view">
+  <div class="page-header">
+    <div><div class="page-title">Mapa del Depósito</div><div class="page-sub" id="mapaHint"></div></div>
+    <button class="btn btn-gold" onclick="mapaScan()">📷 Escanear</button>
+  </div>
+  <div class="mp-leg">🟩 pagado · 🟧 pendiente de pago · 🟥 alerta (muchos días / pagado sin despachar) · borde dorado = ya hay cajas del mismo cliente</div>
+  <div class="mp-grid" id="mapaGrid"></div>
+  <div class="qcard" style="margin-top:16px"><div class="qcard-title">📍 Sin ubicar / sin estante</div><div class="mp-bs" id="mapaOtros"></div></div>
 </div>
 
 <!-- DEPOSITO STOCK -->
@@ -969,6 +1022,71 @@ function json(obj) { return ContentService.createTextOutput(JSON.stringify(obj))
       <button class="btn" style="color:var(--ink);border:1.5px solid var(--border);" onclick="closeShippingModal()">Cerrar</button>
       <button class="btn btn-gold" onclick="saveShipping()">💾 Guardar</button>
       <button class="btn btn-wine" onclick="printShipping()">🖨️ Imprimir</button>
+    </div>
+  </div>
+</div>
+
+<!-- ══ MODAL PEGADO INTELIGENTE ══ -->
+<div class="modal-overlay" id="smartPasteModalOverlay">
+  <div class="modal" style="max-width:720px;">
+    <div class="modal-header"><span class="modal-title">📋 Pegado Inteligente</span><button class="modal-close" onclick="closeSmartPasteModal()">✕</button></div>
+    <div class="modal-body">
+
+      <div id="spStep1">
+        <div class="field">
+          <label>Pegá el mensaje tal cual (dirección + línea de "sacar, pagó…")</label>
+          <textarea id="sp-raw" rows="9" placeholder="Ryan Schuering&#10;255 Evernia Street&#10;Apartment 1306&#10;West Palm beach, Fl 34401&#10;&#10;Viña Alicia, sacar cuando lleguen, pagó Zelle" style="font-family:'DM Mono',monospace;font-size:.8rem;"></textarea>
+        </div>
+        <div style="text-align:right;margin-top:10px;">
+          <button class="btn btn-gold" onclick="runSmartPasteInterpret()">🔎 Interpretar</button>
+        </div>
+      </div>
+
+      <div id="spStep2" style="display:none;">
+        <div id="spMatchBox" style="margin-bottom:14px;">
+          <div class="pedido-label" style="margin-bottom:6px;">¿A qué pedido pendiente corresponde?</div>
+          <select id="sp-match-select" style="width:100%;"></select>
+          <div id="spMatchHint" style="font-size:.7rem;color:var(--muted);margin-top:4px;"></div>
+        </div>
+
+        <div class="field-row">
+          <div class="field"><label>Forma de pago</label>
+            <select id="sp-pago">
+              <option value="">— sin identificar —</option>
+              <option value="cash">💵 Cash</option>
+              <option value="paypal">🅿 PayPal</option>
+              <option value="zelle">⚡ Zelle</option>
+              <option value="cc30">📋 CC 30d</option>
+            </select>
+          </div>
+          <div class="field"><label>Botellas</label>
+            <input id="sp-botellas" type="number" min="0">
+          </div>
+        </div>
+
+        <div class="pedido-label" style="margin:12px 0 6px;">Shipping Request</div>
+        <div class="field-row">
+          <div class="field"><label>Nombre del destinatario</label><input id="sp-nombre"></div>
+          <div class="field"><label>Teléfono</label><input id="sp-telefono"></div>
+        </div>
+        <div class="field-row">
+          <div class="field" style="grid-column:1/-1;"><label>Dirección</label><input id="sp-direccion"></div>
+        </div>
+        <div class="field-row">
+          <div class="field"><label>Código Postal</label><input id="sp-cp"></div>
+          <div class="field"><label>País</label><input id="sp-pais"></div>
+        </div>
+        <div class="field-row">
+          <div class="field" style="grid-column:1/-1;"><label>Email</label><input id="sp-email"></div>
+        </div>
+        <div id="spWarnings" style="margin-top:8px;"></div>
+      </div>
+
+    </div>
+    <div class="modal-footer">
+      <button class="btn" style="color:var(--ink);border:1.5px solid var(--border);" onclick="closeSmartPasteModal()">Cancelar</button>
+      <button class="btn btn-ghost" id="spBackBtn" style="display:none;" onclick="smartPasteBack()">← Corregir texto</button>
+      <button class="btn btn-gold" id="spConfirmBtn" style="display:none;" onclick="confirmSmartPaste()">✅ Confirmar y guardar</button>
     </div>
   </div>
 </div>
@@ -1484,7 +1602,98 @@ function getAlertClass(item){
   return (dDep || dPago) ? 'alerta-row' : '';
 }
 
-function renderAll(){ renderDashboard(); renderStock(); renderPrioridad(); renderEgreso(); renderHistorial(); renderRetHoy(); renderRetTodos(); renderClientes(); updateBadges(); }
+function renderAll(){ renderMapa(); renderDashboard(); renderStock(); renderPrioridad(); renderEgreso(); renderHistorial(); renderRetHoy(); renderRetTodos(); renderClientes(); updateBadges(); }
+
+
+// ═══════════════════════════════════════
+//  MAPA DEL DEPÓSITO
+// ═══════════════════════════════════════
+const MAPA_RACKS=[1,2,3,4];
+const ZONA_R3={1:'Listos · Ecommerce / Turismo',2:'Listos · Comex'};
+let mapaSel=null, mapaStream=null, mapaTimer=null;
+function ubiParse(u){const m=String(u||'').match(/^Rack (\d)(?: · E(\d))?$/);return m?{r:+m[1],e:m[2]?+m[2]:0}:null;}
+function ubiKey(r,e){return 'Rack '+r+' · E'+e;}
+function ubiEsInsumos(u){return /· E3$/.test(String(u||''));}
+function ubiLabel(o){return o?(ubiEsInsumos(o)?'⭐ '+o+' (insumos)':o):'— sin ubicar —';}
+function ubiOpciones(cur){const o=[''];MAPA_RACKS.forEach(r=>[1,2,3].forEach(e=>o.push(ubiKey(r,e))));o.push('Piso','Oficina','Otro');if(cur&&!o.includes(cur))o.push(cur);return o;}
+function fillUbiSelect(v){const s=document.getElementById('ed-ubicacion');s.innerHTML=ubiOpciones(v).map(o=>`<option value="${o}">${ubiLabel(o)}</option>`).join('');s.value=v||'';}
+function mapaBeep(ok){try{const c=new (window.AudioContext||window.webkitAudioContext)(),o=c.createOscillator(),g=c.createGain();o.connect(g);g.connect(c.destination);o.frequency.value=ok?880:220;g.gain.value=.08;o.start();o.stop(c.currentTime+(ok?.12:.25));}catch(e){} if(navigator.vibrate)navigator.vibrate(ok?40:[80,40,80]);}
+function mapaUnits(){
+  const u=[];
+  DEP.filter(i=>!i.retirado).forEach(i=>{
+    const peds=(i.pedidos||[]);
+    if(peds.length) peds.forEach((p,k)=>{ if(p.salida) return; u.push({key:i.id+':'+k,dep:i,idx:k,ped:p,ubi:p.ubicacion||i.ubicacion||'',pago:p.pago,label:(i.cliente||'?').slice(0,8)+' P'+(k+1),tip:(i.cliente||'')+' · Pedido '+(k+1)+(p.destinatario?' · '+p.destinatario:'')}); });
+    else u.push({key:i.id,dep:i,idx:null,ped:null,ubi:i.ubicacion||'',pago:i.pago,label:(i.cliente||'?').slice(0,10),tip:(i.cliente||'')+' · '+(i.negocio||'')});
+  });
+  return u;
+}
+function mapaEstado(u){
+  if(u.idx===null) return getAlertClass(u.dep)?'al':(isPagoPaid(u.pago)?'ok':'pe');
+  return daysDiff(u.dep.fechaIngreso)>=ALERTA_DEP_DIAS?'al':(isPagoPaid(u.pago)?'ok':'pe');
+}
+function pedUbiResumen(i){const l=[...new Set((i.pedidos||[]).filter(p=>p.ubicacion).map(p=>p.ubicacion.replace('Rack ','R')))];return l.length?'<div style="font-size:.62rem;color:var(--muted);margin-top:3px;">📍 pedidos: '+l.join(' | ')+'</div>':'';}
+function renderMapa(){
+  const el=document.getElementById('mapaGrid'); if(!el) return;
+  const units=mapaUnits();
+  const sel=units.find(x=>x.key===mapaSel); if(mapaSel&&!sel) mapaSel=null;
+  const slot={}, otros=[];
+  units.forEach(x=>{const p=ubiParse(x.ubi); if(p&&p.e&&MAPA_RACKS.includes(p.r)){const k=p.r+'-'+p.e;(slot[k]=slot[k]||[]).push(x);} else otros.push(x);});
+  const blk=x=>`<div class="mp-b mp-${mapaEstado(x)}${x.key===mapaSel?' sel':''}" onclick="mapaPick('${x.key}',event)" title="${x.tip}"><b>${ubiEsInsumos(x.ubi)?'⭐ ':''}${x.label}</b><small>${daysDiff(x.dep.fechaIngreso)}d · ${isPagoPaid(x.pago)?'pagado':'a cobrar'}</small></div>`;
+  el.innerHTML=MAPA_RACKS.map(r=>`<div class="mp-rack"><div class="mp-rt">Rack ${r}</div>`+[3,2,1].map(e=>{
+    const ins=e===3, items=slot[r+'-'+e]||[];
+    const glow=sel&&!ins&&items.some(x=>x.dep.cliente===sel.dep.cliente&&x.key!==sel.key)?' mp-match':'';
+    const lbl=ins?'Insumos (solo excepciones ⭐)':(r===3?ZONA_R3[e]:'Estante '+e);
+    return `<div class="mp-sh${ins?' mp-ins':''}${glow}" onclick="mapaDrop(${r},${e})"><div class="mp-sl">E${e} · ${lbl}</div><div class="mp-bs">${items.map(blk).join('')}</div></div>`;
+  }).join('')+'</div>').join('');
+  document.getElementById('mapaOtros').innerHTML=otros.length?otros.map(blk).join(''):'<span style="color:var(--muted);font-size:.8rem">Todo ubicado 🎉</span>';
+  document.getElementById('mapaHint').innerHTML=sel?`🖐️ En mano: <b>${sel.tip}</b> (${isPagoPaid(sel.pago)?'pagado':'a cobrar'}) — tocá un estante para dejarlo. <span class="mp-x" onclick="mapaSel=null;renderMapa()">soltar</span>`:'Tocá una caja o pedido para tomarlo y después un estante para dejarlo.';
+}
+function mapaPick(key,ev){ev.stopPropagation();mapaSel=mapaSel===key?null:key;renderMapa();}
+async function mapaSetUbi(depId,idx,u){
+  if(idx===null||idx===undefined){await setField(depId,'ubicacion',u,'deposito');return;}
+  const it=DEP.find(i=>i.id===depId); if(!it||!it.pedidos||!it.pedidos[idx]) return;
+  it.pedidos[idx].ubicacion=u;
+  try{await api({action:'update',target:'deposito',id:depId,field:'pedidos',value:JSON.stringify(it.pedidos)});}catch(e){showToast('Error al guardar','error');}
+  await loadAll();
+}
+async function mapaDrop(r,e){
+  if(!mapaSel) return;
+  const u=mapaUnits().find(x=>x.key===mapaSel); if(!u) return;
+  const neg=(u.ped&&u.ped.negocio)||u.dep.negocio;
+  const sinPago=r===3&&e<3&&!isPagoPaid(u.pago);
+  const zona=r===3&&e<3&&((e===1)!==['Ecommerce','Turismo'].includes(neg));
+  mapaSel=null;
+  await mapaSetUbi(u.dep.id,u.idx,ubiKey(r,e));
+  const warn=e===3||sinPago||zona; mapaBeep(!warn);
+  showToast(e===3?'⚠️ Estás dejando '+u.label+' en un estante de insumos ⭐':sinPago?'⚠️ '+u.label+' está a cobrar y Rack 3 es de listos para salir':zona?'⚠️ Ojo: en Rack 3 E'+e+' van '+ZONA_R3[e]:'📍 '+u.label+' → Rack '+r+' · E'+e, warn?'error':'success');
+}
+function mapaScan(){
+  const m=document.createElement('div'); m.className='mp-scan'; m.id='mpScan';
+  m.innerHTML=`<div class="mp-sc"><div style="display:flex;justify-content:space-between"><b>📷 Escanear caja</b><span class="mp-x" onclick="mapaScanClose()">✕ cerrar</span></div><video id="mpVid" playsinline muted></video><div id="mpRes" class="mp-res">Apuntá al QR de la etiqueta</div><div style="display:flex;gap:6px"><input id="mpId" placeholder="o escribí el # de la etiqueta"><button class="btn btn-wine btn-sm" onclick="mapaFound(document.getElementById('mpId').value.trim(),null)">OK</button></div></div>`;
+  document.body.appendChild(m);
+  if(!('BarcodeDetector' in window)||!navigator.mediaDevices){document.getElementById('mpVid').style.display='none';document.getElementById('mpRes').textContent='Este navegador no escanea desde la app: escribí el # de la etiqueta.';return;}
+  const det=new BarcodeDetector({formats:['qr_code']});
+  navigator.mediaDevices.getUserMedia({video:{facingMode:'environment'}}).then(st=>{
+    mapaStream=st;const v=document.getElementById('mpVid');v.srcObject=st;v.play();
+    mapaTimer=setInterval(async()=>{try{const r=await det.detect(v);if(r.length){let id=r[0].rawValue,sub=null;try{const q=new URL(id).searchParams;sub=q.get('sub');id=q.get('pedido')||id;}catch(e){} mapaFound(id,(sub===null||sub==='')?null:parseInt(sub));}}catch(e){}},400);
+  }).catch(()=>{document.getElementById('mpRes').textContent='No se pudo abrir la cámara (revisá permisos).';});
+}
+function mapaFound(id,sub){
+  id=String(id||'').replace(/^#/,'');
+  let it=DEP.find(i=>i.id===id&&!i.retirado);
+  if(!it){const m=id.match(/^(.*)-(\d+)$/); if(m){it=DEP.find(i=>i.id===m[1]&&!i.retirado); if(it&&(sub===undefined||sub===null)) sub=+m[2]-1;}}
+  const res=document.getElementById('mpRes'); if(!res) return;
+  if(!it){mapaBeep(false);res.className='mp-res bad';res.textContent='❌ No está en depósito: '+id;return;}
+  const idx=(sub!==null&&sub!==undefined&&!isNaN(sub)&&it.pedidos&&it.pedidos[sub])?sub:null;
+  const ped=idx!==null?it.pedidos[idx]:null;
+  const ubi=(ped&&ped.ubicacion)||it.ubicacion||'sin ubicar';
+  const pagado=isPagoPaid(ped?ped.pago:it.pago);
+  mapaBeep(true); clearInterval(mapaTimer); mapaTimer=null;
+  res.className='mp-res good';
+  res.innerHTML=`✅ <b>${it.cliente}</b>${ped?' · Pedido '+(idx+1)+(ped.destinatario?' · '+ped.destinatario:''):''} · ${pagado?'pagado':'a cobrar'} · ${ubi}<div style="margin-top:6px;font-size:.75rem">¿Dónde lo dejás?</div><div class="mp-slots">${ubiOpciones('').filter(o=>o.startsWith('Rack')).map(o=>`<button class="btn btn-sm" onclick="mapaPlace('${it.id}',${idx},'${o}')">${ubiEsInsumos(o)?'⭐ ':''}${o.replace('Rack ','R')}</button>`).join('')}</div>`;
+}
+async function mapaPlace(id,idx,u){mapaScanClose();await mapaSetUbi(id,idx,u);const ins=ubiEsInsumos(u);mapaBeep(!ins);showToast(ins?'⚠️ Estás dejando la caja en un estante de insumos ⭐':'📍 Ubicada en '+u,ins?'error':'success');}
+function mapaScanClose(){clearInterval(mapaTimer);if(mapaStream)mapaStream.getTracks().forEach(t=>t.stop());mapaStream=null;const m=document.getElementById('mpScan');if(m)m.remove();}
 
 function updateBadges(){
   const inD=DEP.filter(i=>!i.retirado);
@@ -1588,7 +1797,7 @@ function renderStock(){
       <td class="mono">${i.transporte||'—'}</td>
       <td class="mono">${totalBot||i.botellas}</td>
       <td>${pagoBadge(i.pago)}</td>
-      <td onclick="event.stopPropagation()">${ubicacionSelect(i.id, i.ubicacion)}</td>
+      <td onclick="event.stopPropagation()">${ubicacionSelect(i.id, i.ubicacion)}${ubiEsInsumos(i.ubicacion)?'<div class="ret-exceptcion" style="margin-top:3px;">⭐ En insumos</div>':''}${pedUbiResumen(i)}</td>
       <td class="mono">${String(i.fechaIngreso||'').slice(0,10)||'—'}</td>
       <td>${daysPill(daysDiff(i.fechaIngreso))}</td>
       <td onclick="event.stopPropagation()"><div style="display:flex;gap:5px;">
@@ -1659,6 +1868,12 @@ function pedidoCard(depId, ped, idx){
         <span class="pedido-label">Transp. Salida</span>
         <select onchange="updatePedido('${depId}',${idx},'transportistaSalida',this.value)">
           ${salidaOpts.map(o=>`<option value="${o}" ${o===(ped.transportistaSalida||'')?'selected':''}>${o||'— salida —'}</option>`).join('')}
+        </select>
+      </div>
+      <div class="pedido-field">
+        <span class="pedido-label">Ubicación</span>
+        <select onchange="updatePedido('${depId}',${idx},'ubicacion',this.value)">
+          ${ubiOpciones(ped.ubicacion||'').map(o=>`<option value="${o}" ${o===(ped.ubicacion||'')?'selected':''}>${o?ubiLabel(o):'— igual que el envío —'}</option>`).join('')}
         </select>
       </div>
     </div>
@@ -1835,10 +2050,10 @@ function searchHist(v){histSearch=v;renderHistorial();}
 
 // ── Ubicacion selector
 function ubicacionSelect(id, current){
-  const opts=['','Rack 1','Rack 2','Rack 3','Rack 4','Rack 5','Piso','Oficina','Otro'];
-  return `<select class="mono" style="border:1.5px solid var(--border);border-radius:6px;padding:3px 6px;font-size:.73rem;background:var(--cream);outline:none;max-width:90px;"
+  const opts=ubiOpciones(current);
+  return `<select class="mono" style="border:1.5px solid var(--border);border-radius:6px;padding:3px 6px;font-size:.73rem;background:var(--cream);outline:none;max-width:150px;"
     onchange="setField('${id}','ubicacion',this.value,'deposito')">
-    ${opts.map(o=>`<option value="${o}" ${o===current?'selected':''}>${o||'— ubicar —'}</option>`).join('')}
+    ${opts.map(o=>`<option value="${o}" ${o===current?'selected':''}>${o?ubiLabel(o):'— ubicar —'}</option>`).join('')}
   </select>`;
 }
 
@@ -2281,7 +2496,7 @@ function openEditDepModal(id){
   document.getElementById('ed-destino').value     = item.destino||'';
   document.getElementById('ed-fecha').value       = item.fechaIngreso||today();
   document.getElementById('ed-notas').value       = item.notas||'';
-  document.getElementById('ed-ubicacion').value   = item.ubicacion||'';
+  fillUbiSelect(item.ubicacion||'');
   document.getElementById('ed-transporte-salida').value = '';
   document.getElementById('editDepModalOverlay').classList.add('open');
 }
@@ -2387,6 +2602,7 @@ async function updatePedido(depId, idx, field, value){
   try{
     await api({action:'update', target:'deposito', id:depId, field:'pedidos', value:JSON.stringify(item.pedidos)});
     showToast('Guardado ✅','success');
+    if(field==='ubicacion') renderMapa();
   }catch(e){ showToast('Error al guardar','error'); }
 }
 
@@ -2545,28 +2761,31 @@ function exportStockCSV(){
   var pago_label = {cash:'Efectivo (Cash)',paypal:'PayPal',zelle:'Zelle',cc30:'Cta Corriente 30d',pendiente:'Pendiente'};
   var prio_label = {1:'Comex Doc (URGENTE)',2:'Comex Vino',3:'Turismo/Feria/Ecomm',4:'Pendiente pago'};
   var prio_color = {1:'FFFFE0B2',2:'FFBBDEFB',3:'FFC8E6C9',4:'FFF5F5F5'};
-  var subpendiente_color = 'FFFFF9C4'; // amarillo claro para subpedidos pendientes
 
+  // Build Excel XML (SpreadsheetML) - opens perfectly in Excel with formatting
   var xml = '<?xml version="1.0" encoding="UTF-8"?><?mso-application progid="Excel.Sheet"?>';
   xml += '<Workbook xmlns="urn:schemas-microsoft-com:office:spreadsheet" xmlns:ss="urn:schemas-microsoft-com:office:spreadsheet">';
   xml += '<Styles>';
+  // Header style
   xml += '<Style ss:ID="h"><Font ss:Bold="1" ss:Color="#FFFFFF" ss:Size="10"/><Interior ss:Color="#7B1C3A" ss:Pattern="Solid"/><Alignment ss:Horizontal="Center"/></Style>';
+  // Priority styles
   xml += '<Style ss:ID="p1"><Interior ss:Color="#FFE0B2" ss:Pattern="Solid"/><Font ss:Bold="1"/></Style>';
   xml += '<Style ss:ID="p2"><Interior ss:Color="#BBDEFB" ss:Pattern="Solid"/><Font ss:Bold="1"/></Style>';
   xml += '<Style ss:ID="p3"><Interior ss:Color="#C8E6C9" ss:Pattern="Solid"/></Style>';
   xml += '<Style ss:ID="p4"><Interior ss:Color="#F5F5F5" ss:Pattern="Solid"/></Style>';
-  xml += '<Style ss:ID="sub"><Interior ss:Color="#FFF9C4" ss:Pattern="Solid"/></Style>';
-  xml += '<Style ss:ID="subok"><Interior ss:Color="#E8F5E9" ss:Pattern="Solid"/></Style>';
+  // Date style
+  xml += '<Style ss:ID="d"><NumberFormat ss:Format="DD/MM/YYYY"/></Style>';
+  // Normal
+  xml += '<Style ss:ID="n"><Alignment ss:WrapText="1"/></Style>';
   xml += '</Styles>';
   xml += '<Worksheet ss:Name="Stock Deposito">';
   xml += '<Table>';
-
   // Column widths
-  var widths = [130,180,100,100,100,70,150,100,60,100,150,200];
+  var widths = [100,180,100,100,100,70,120,100,60,120,200];
   widths.forEach(function(w){ xml += '<Column ss:Width="'+w+'"/>'; });
 
   // Header row
-  var cols = ['Prioridad','Cliente','Negocio','Subtipo','Transporte','Botellas','Forma de Pago','Fecha Ingreso','Días','Destino','Destinatario','Notas'];
+  var cols = ['Prioridad','Cliente','Negocio','Subtipo','Transporte','Botellas','Forma de Pago','Fecha Ingreso','Días','Destino','Notas'];
   xml += '<Row ss:Height="20">';
   cols.forEach(function(c){ xml += '<Cell ss:StyleID="h"><Data ss:Type="String">'+c+'</Data></Cell>'; });
   xml += '</Row>';
@@ -2577,51 +2796,20 @@ function exportStockCSV(){
     var d = daysDiff(i.fechaIngreso);
     var styleId = 'p'+p;
     var fechaStr = i.fechaIngreso ? String(i.fechaIngreso).slice(0,10) : '';
-    var pagoMain = pago_label[i.pago] || i.pago || '';
 
-    var hasSubs = i.pedidos && i.pedidos.length > 0;
-
-    if(!hasSubs){
-      // Single row — no subpedidos
-      xml += '<Row ss:Height="18">';
-      xml += '<Cell ss:StyleID="'+styleId+'"><Data ss:Type="String">'+(prio_label[p]||'P'+p)+'</Data></Cell>';
-      xml += '<Cell ss:StyleID="'+styleId+'"><Data ss:Type="String">'+(i.cliente||'')+'</Data></Cell>';
-      xml += '<Cell ss:StyleID="'+styleId+'"><Data ss:Type="String">'+(i.negocio||'')+'</Data></Cell>';
-      xml += '<Cell ss:StyleID="'+styleId+'"><Data ss:Type="String">'+(i.subtipo||'')+'</Data></Cell>';
-      xml += '<Cell ss:StyleID="'+styleId+'"><Data ss:Type="String">'+(i.transporte||'')+'</Data></Cell>';
-      xml += '<Cell ss:StyleID="'+styleId+'"><Data ss:Type="String">'+(i.botellas||'')+'</Data></Cell>';
-      xml += '<Cell ss:StyleID="'+styleId+'"><Data ss:Type="String">'+pagoMain+'</Data></Cell>';
-      xml += '<Cell ss:StyleID="'+styleId+'"><Data ss:Type="String">'+fechaStr+'</Data></Cell>';
-      xml += '<Cell ss:StyleID="'+styleId+'"><Data ss:Type="Number">'+d+'</Data></Cell>';
-      xml += '<Cell ss:StyleID="'+styleId+'"><Data ss:Type="String">'+(i.destino||'')+'</Data></Cell>';
-      xml += '<Cell ss:StyleID="'+styleId+'"><Data ss:Type="String"></Data></Cell>';
-      xml += '<Cell ss:StyleID="'+styleId+'"><Data ss:Type="String">'+(i.notas||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;')+'</Data></Cell>';
-      xml += '</Row>';
-    } else {
-      // One row per subpedido
-      i.pedidos.forEach(function(ped, pidx){
-        if(ped.salida) return; // skip already shipped
-        var pedPago = pago_label[ped.pago||'pendiente'] || ped.pago || 'Pendiente';
-        var isPendiente = !ped.pago || ped.pago === 'pendiente';
-        var subStyle = isPendiente ? 'sub' : 'subok';
-        var prioStr = (prio_label[p]||'P'+p) + ' · Sub '+(pidx+1);
-
-        xml += '<Row ss:Height="18">';
-        xml += '<Cell ss:StyleID="'+subStyle+'"><Data ss:Type="String">'+prioStr+'</Data></Cell>';
-        xml += '<Cell ss:StyleID="'+subStyle+'"><Data ss:Type="String">'+(i.cliente||'')+'</Data></Cell>';
-        xml += '<Cell ss:StyleID="'+subStyle+'"><Data ss:Type="String">'+(ped.negocio||i.negocio||'')+'</Data></Cell>';
-        xml += '<Cell ss:StyleID="'+subStyle+'"><Data ss:Type="String">'+(i.subtipo||'vino')+'</Data></Cell>';
-        xml += '<Cell ss:StyleID="'+subStyle+'"><Data ss:Type="String">'+(ped.transportistaSalida||i.transporte||'')+'</Data></Cell>';
-        xml += '<Cell ss:StyleID="'+subStyle+'"><Data ss:Type="String">'+(ped.botellas||'')+'</Data></Cell>';
-        xml += '<Cell ss:StyleID="'+subStyle+'"><Data ss:Type="String">'+pedPago+'</Data></Cell>';
-        xml += '<Cell ss:StyleID="'+subStyle+'"><Data ss:Type="String">'+fechaStr+'</Data></Cell>';
-        xml += '<Cell ss:StyleID="'+subStyle+'"><Data ss:Type="Number">'+d+'</Data></Cell>';
-        xml += '<Cell ss:StyleID="'+subStyle+'"><Data ss:Type="String">'+(ped.destino||i.destino||'')+'</Data></Cell>';
-        xml += '<Cell ss:StyleID="'+subStyle+'"><Data ss:Type="String">'+(ped.destinatario||'')+'</Data></Cell>';
-        xml += '<Cell ss:StyleID="'+subStyle+'"><Data ss:Type="String">'+(ped.notas||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;')+'</Data></Cell>';
-        xml += '</Row>';
-      });
-    }
+    xml += '<Row ss:Height="18">';
+    xml += '<Cell ss:StyleID="'+styleId+'"><Data ss:Type="String">'+(prio_label[p]||'P'+p)+'</Data></Cell>';
+    xml += '<Cell ss:StyleID="'+styleId+'"><Data ss:Type="String">'+(i.cliente||'')+'</Data></Cell>';
+    xml += '<Cell ss:StyleID="'+styleId+'"><Data ss:Type="String">'+(i.negocio||'')+'</Data></Cell>';
+    xml += '<Cell ss:StyleID="'+styleId+'"><Data ss:Type="String">'+(i.subtipo||'')+'</Data></Cell>';
+    xml += '<Cell ss:StyleID="'+styleId+'"><Data ss:Type="String">'+(i.transporte||'')+'</Data></Cell>';
+    xml += '<Cell ss:StyleID="'+styleId+'"><Data ss:Type="String">'+(i.botellas||'')+'</Data></Cell>';
+    xml += '<Cell ss:StyleID="'+styleId+'"><Data ss:Type="String">'+(pago_label[i.pago]||i.pago||'')+'</Data></Cell>';
+    xml += '<Cell ss:StyleID="'+styleId+'"><Data ss:Type="String">'+fechaStr+'</Data></Cell>';
+    xml += '<Cell ss:StyleID="'+styleId+'"><Data ss:Type="Number">'+d+'</Data></Cell>';
+    xml += '<Cell ss:StyleID="'+styleId+'"><Data ss:Type="String">'+(i.destino||'')+'</Data></Cell>';
+    xml += '<Cell ss:StyleID="'+styleId+'"><Data ss:Type="String">'+(i.notas||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;')+'</Data></Cell>';
+    xml += '</Row>';
   });
 
   xml += '</Table></Worksheet></Workbook>';
@@ -2634,9 +2822,8 @@ function exportStockCSV(){
   a.download = 'AWS_Stock_'+fecha+'.xls';
   a.click();
   URL.revokeObjectURL(url);
-  showToast('Excel descargado con subpedidos','success');
+  showToast('Excel descargado con formato','success');
 }
-
 
 function exportStockWhatsapp(){
   var data = DEP.filter(function(i){ return !i.retirado; });
@@ -3174,6 +3361,233 @@ function printShipping(){
 }
 
 // ═══════════════════════════════════════
+//  PEGADO INTELIGENTE — parser de WhatsApp
+// ═══════════════════════════════════════
+function parseSmartPaste(raw){
+  let lines = raw.split('\n')
+    .map(l=>l.trim().replace(/^["“”'’]+|["“”'’]+$/g,'').trim())
+    .filter(l=>l);
+  const result = { clienteGuess:'', botellas:'', pago:'', pagoFound:false,
+    nombre:'', direccion:'', codigoPostal:'', pais:'', telefono:'', email:'', paisInferido:false };
+  const fullText = lines.join(' \n ');
+
+  const botMatch = fullText.match(/(\d+)\s*bot[a-z]*/i) || fullText.match(/(\d+)\s*bottles?/i);
+  if(botMatch) result.botellas = botMatch[1]||'';
+
+  const pagoMap = [
+    {re:/zelle/i, val:'zelle'}, {re:/paypal/i, val:'paypal'},
+    {re:/\bcash\b|efectivo/i, val:'cash'}, {re:/cc\s?30|corriente/i, val:'cc30'},
+  ];
+  for(const p of pagoMap){ if(p.re.test(fullText)){ result.pago=p.val; result.pagoFound=true; break; } }
+
+  const emailMatch = fullText.match(/[\w.+-]+@[\w-]+\.[\w.-]+/);
+  if(emailMatch) result.email = emailMatch[0];
+
+  // Phone: check line by line (not the joined text) so it can't span across lines/other fields
+  let phoneMatch = null;
+  for(const l of lines){
+    const m = l.match(/(\+?\d[\d\s.\-()]{7,}\d)/);
+    if(m && m[0].replace(/[^\d]/g,'').length>=7){ phoneMatch = m; break; }
+  }
+  if(phoneMatch) result.telefono = phoneMatch[0].trim();
+
+  let instructionIdx = lines.findIndex(l=>/sacar/i.test(l));
+  let instructionLine = instructionIdx>=0 ? lines[instructionIdx] : '';
+  if(instructionLine){
+    let cl = instructionLine.replace(/\d+\s*bot[a-z]*/i,'').replace(/\d+\s*bottles?/i,'');
+    const sacarIdx = cl.toLowerCase().indexOf('sacar');
+    if(sacarIdx>=0) cl = cl.slice(0, sacarIdx);
+    result.clienteGuess = cl.replace(/,\s*$/,'').trim();
+  }
+
+  let candidateLines = lines.filter((l,idx)=>{
+    if(idx===instructionIdx) return false;
+    if(/^\d+\s*bot[a-z]*$/i.test(l)) return false;              // standalone "12 bottles" line
+    if(/^[A-Za-zÀ-ÿ]+\s*\([A-Za-zÀ-ÿ\s]+\)$/.test(l)) return false; // "Grupo (Nombre real)" sender label
+    if(emailMatch && l.includes(emailMatch[0])) return false;
+    if(phoneMatch && l.includes(phoneMatch[0])) return false;
+    return true;
+  });
+
+  const countryWords = ['usa','united states','estados unidos'];
+  let countryIdx = candidateLines.findIndex(l=>countryWords.includes(l.toLowerCase()));
+  if(countryIdx>=0){ result.pais='Estados Unidos'; candidateLines.splice(countryIdx,1); }
+
+  let nameIdx = candidateLines.findIndex(l => /^([A-ZÁÉÍÓÚÑ][a-zà-ÿ'’-]+\s*){2,4}$/.test(l) && !/\d/.test(l));
+  if(nameIdx>=0){ result.nombre = candidateLines[nameIdx]; candidateLines.splice(nameIdx,1); }
+
+  const seen = new Set(); const addrLines=[];
+  candidateLines.forEach(l=>{ const k=l.toLowerCase(); if(!seen.has(k)){ seen.add(k); addrLines.push(l); } });
+
+  let zipFound='';
+  const addrLinesClean = addrLines.map(l=>{
+    const zm = l.match(/\b(\d{5})(-\d{4})?\b/);
+    if(zm && !zipFound){ zipFound=zm[1]; return l.replace(zm[0],'').replace(/,\s*$/,'').trim(); }
+    return l;
+  });
+  result.codigoPostal = zipFound;
+  result.direccion = addrLinesClean.filter(l=>l).join(', ');
+
+  if(!result.pais){
+    const usStates = /\b(AL|AK|AZ|AR|CA|CO|CT|DE|FL|GA|HI|ID|IL|IN|IA|KS|KY|LA|ME|MD|MA|MI|MN|MS|MO|MT|NE|NV|NH|NJ|NM|NY|NC|ND|OH|OK|OR|PA|RI|SC|SD|TN|TX|UT|VT|VA|WA|WV|WI|WY)\b/;
+    if(zipFound || usStates.test(result.direccion) || /arizona|florida|texas|california|wisconsin/i.test(result.direccion)){
+      result.pais='Estados Unidos'; result.paisInferido=true;
+    }
+  }
+  return result;
+}
+
+function normText(s){
+  return String(s||'').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'').replace(/[^a-z0-9\s]/g,'').trim();
+}
+function nameSimilarity(a,b){
+  if(!a||!b) return 0;
+  a=normText(a); b=normText(b);
+  if(!a||!b) return 0;
+  if(a===b) return 1;
+  if(a.includes(b)||b.includes(a)) return 0.85;
+  const aw=a.split(/\s+/), bw=b.split(/\s+/);
+  const common = aw.filter(w=>bw.includes(w)).length;
+  return common / Math.max(aw.length,bw.length);
+}
+function findPendingMatches(nameGuess){
+  const out=[];
+  DEP.filter(d=>!d.retirado).forEach(item=>{
+    const hasSubs = item.pedidos && item.pedidos.length>0;
+    if(!hasSubs){
+      if(!isPagoPaid(item.pago)){
+        out.push({depId:item.id, subIdx:null, label:`${item.cliente} — Stock (${item.botellas||'—'} bot.)`, score:nameSimilarity(item.cliente,nameGuess)});
+      }
+    } else {
+      item.pedidos.forEach((ped,idx)=>{
+        if(ped.salida) return;
+        if(!isPagoPaid(ped.pago)){
+          out.push({depId:item.id, subIdx:idx, label:`${item.cliente} · sub-pedido ${idx+1}${ped.destinatario?' — '+ped.destinatario:''}`, score:nameSimilarity(item.cliente,nameGuess)});
+        }
+      });
+    }
+  });
+  out.sort((a,b)=>b.score-a.score);
+  return out;
+}
+
+// ═══════════════════════════════════════
+//  PEGADO INTELIGENTE — modal
+// ═══════════════════════════════════════
+let spParsed=null, spMatches=[];
+
+function openSmartPasteModal(){
+  document.getElementById('sp-raw').value='';
+  document.getElementById('spStep1').style.display='block';
+  document.getElementById('spStep2').style.display='none';
+  document.getElementById('spBackBtn').style.display='none';
+  document.getElementById('spConfirmBtn').style.display='none';
+  document.getElementById('smartPasteModalOverlay').classList.add('open');
+}
+function closeSmartPasteModal(){
+  document.getElementById('smartPasteModalOverlay').classList.remove('open');
+}
+function smartPasteBack(){
+  document.getElementById('spStep1').style.display='block';
+  document.getElementById('spStep2').style.display='none';
+  document.getElementById('spBackBtn').style.display='none';
+  document.getElementById('spConfirmBtn').style.display='none';
+}
+
+function runSmartPasteInterpret(){
+  const raw = document.getElementById('sp-raw').value;
+  if(!raw.trim()){ showToast('Pegá un mensaje primero','error'); return; }
+  spParsed = parseSmartPaste(raw);
+  spMatches = findPendingMatches(spParsed.clienteGuess);
+
+  const sel = document.getElementById('sp-match-select');
+  if(spMatches.length){
+    sel.innerHTML = spMatches.slice(0,8).map((m,i)=>
+      `<option value="${m.depId}||${m.subIdx===null?'null':m.subIdx}" ${i===0 && m.score>=0.5 ? 'selected':''}>${m.label}${m.score>=0.5?' ✓ probable':''}</option>`
+    ).join('') + `<option value="">— ninguno, elegir a mano —</option>`;
+    document.getElementById('spMatchHint').textContent = spParsed.clienteGuess
+      ? `Detectamos "${spParsed.clienteGuess}" en el mensaje — confirmá que sea el pedido correcto antes de guardar.`
+      : 'No pudimos identificar el nombre del cliente en el mensaje — elegí de la lista.';
+  } else {
+    sel.innerHTML = `<option value="">No hay pedidos pendientes de pago en este momento</option>`;
+    document.getElementById('spMatchHint').textContent = '';
+  }
+
+  document.getElementById('sp-pago').value      = spParsed.pago||'';
+  document.getElementById('sp-botellas').value  = spParsed.botellas||'';
+  document.getElementById('sp-nombre').value    = spParsed.nombre||'';
+  document.getElementById('sp-direccion').value = spParsed.direccion||'';
+  document.getElementById('sp-cp').value        = spParsed.codigoPostal||'';
+  document.getElementById('sp-pais').value      = spParsed.pais||'';
+  document.getElementById('sp-telefono').value  = spParsed.telefono||'';
+  document.getElementById('sp-email').value     = spParsed.email||'';
+
+  const warnList=[];
+  const setUncertain=(id,uncertain)=>document.getElementById(id).closest('.field').classList.toggle('sp-uncertain',uncertain);
+  setUncertain('sp-pago', !spParsed.pagoFound);
+  if(!spParsed.pagoFound) warnList.push('⚠️ No identificamos la forma de pago — elegila manualmente.');
+  setUncertain('sp-nombre', !spParsed.nombre);
+  if(!spParsed.nombre) warnList.push('⚠️ No identificamos el nombre del destinatario.');
+  setUncertain('sp-direccion', !spParsed.direccion);
+  if(!spParsed.direccion) warnList.push('⚠️ No identificamos la dirección completa.');
+  setUncertain('sp-cp', !spParsed.codigoPostal);
+  setUncertain('sp-email', !spParsed.email);
+  setUncertain('sp-telefono', !spParsed.telefono);
+  setUncertain('sp-pais', !spParsed.pais);
+  if(spParsed.paisInferido) warnList.push('ℹ️ País inferido automáticamente a partir de la dirección — confirmalo.');
+  if(!spMatches.length) warnList.push('⚠️ No hay pedidos con pago pendiente para vincular en este momento.');
+  document.getElementById('spWarnings').innerHTML = warnList.map(w=>`<div class="sp-warn-item">${w}</div>`).join('');
+
+  document.getElementById('spStep1').style.display='none';
+  document.getElementById('spStep2').style.display='block';
+  document.getElementById('spBackBtn').style.display='inline-block';
+  document.getElementById('spConfirmBtn').style.display='inline-block';
+}
+
+async function confirmSmartPaste(){
+  const selVal = document.getElementById('sp-match-select').value;
+  if(!selVal){ showToast('Elegí a qué pedido corresponde antes de guardar','error'); return; }
+  const [depId, subIdxRaw] = selVal.split('||');
+  const subIdx = subIdxRaw==='null' ? null : parseInt(subIdxRaw);
+  const item = DEP.find(d=>String(d.id)===String(depId));
+  if(!item){ showToast('No se encontró el pedido','error'); return; }
+
+  const pago = document.getElementById('sp-pago').value;
+  const botellas = document.getElementById('sp-botellas').value;
+  const sh = {
+    nombre:       document.getElementById('sp-nombre').value.trim(),
+    direccion:    document.getElementById('sp-direccion').value.trim(),
+    codigoPostal: document.getElementById('sp-cp').value.trim(),
+    pais:         document.getElementById('sp-pais').value.trim(),
+    telefono:     document.getElementById('sp-telefono').value.trim(),
+    email:        document.getElementById('sp-email').value.trim(),
+  };
+
+  const btn = document.getElementById('spConfirmBtn');
+  btn.disabled=true; btn.innerHTML='<span class="spinner"></span>Guardando…';
+
+  try{
+    if(subIdx===null){
+      const pagoChanged = pago && pago!=='pendiente' && item.pago!==pago;
+      if(pago) await api({action:'update',target:'deposito',id:depId,field:'pago',value:pago});
+      if(pagoChanged) await api({action:'update',target:'deposito',id:depId,field:'fechaPago',value:today()});
+      if(botellas) await api({action:'update',target:'deposito',id:depId,field:'botellas',value:botellas});
+      await api({action:'update',target:'deposito',id:depId,field:'shipping',value:JSON.stringify(sh)});
+    } else {
+      if(!item.pedidos || !item.pedidos[subIdx]) throw new Error('sub no encontrado');
+      if(pago) item.pedidos[subIdx].pago = pago;
+      if(botellas) item.pedidos[subIdx].botellas = botellas;
+      item.pedidos[subIdx].shipping = sh;
+      await api({action:'update',target:'deposito',id:depId,field:'pedidos',value:JSON.stringify(item.pedidos)});
+    }
+    closeSmartPasteModal();
+    showToast('✅ Pedido actualizado con Shipping Request','success');
+    await loadAll();
+  }catch(e){ showToast('Error al guardar','error'); }
+  btn.disabled=false; btn.innerHTML='✅ Confirmar y guardar';
+}
+
+// ═══════════════════════════════════════
 //  VISTA PÚBLICA (escaneo del QR)
 // ═══════════════════════════════════════
 function checkPublicView(){
@@ -3235,6 +3649,13 @@ function renderPublicView(item, subIdx){
 
 // Run the public-view check on boot; if it's a scan, skip normal app rendering.
 checkPublicView();
+
+// Registrar service worker (necesario para que Chrome ofrezca instalar la app)
+if('serviceWorker' in navigator){
+  window.addEventListener('load', () => {
+    navigator.serviceWorker.register('sw.js').catch(()=>{});
+  });
+}
 </script>
 </body>
 </html>
