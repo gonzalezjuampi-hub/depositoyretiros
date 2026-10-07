@@ -383,6 +383,11 @@ tr:hover td{background:var(--cream);}
 .mp-res{padding:10px;border-radius:8px;background:var(--cream);font-size:.85rem}
 .mp-res.good{background:#E8F5EC;animation:mpPop .3s}.mp-res.bad{background:#FBE9EC}
 .mp-slots{display:flex;flex-wrap:wrap;gap:4px;margin-top:8px}
+.mp-day{background:#fff;border:1.5px solid var(--border);border-radius:12px;padding:12px 14px;margin-bottom:12px}
+.mp-bar{height:12px;background:var(--cream);border-radius:20px;overflow:hidden;margin:6px 0 10px}
+.mp-bar>div{height:100%;background:linear-gradient(90deg,var(--green),#4CAF72);border-radius:20px;transition:width .6s}
+.mp-chips{display:flex;flex-wrap:wrap;gap:6px;font-size:.74rem}
+.mp-chips span{background:var(--ivory);border:1px solid var(--border);border-radius:20px;padding:2px 10px}
 </style>
 </head>
 <body>
@@ -587,6 +592,7 @@ function json(obj) { return ContentService.createTextOutput(JSON.stringify(obj))
     <div><div class="page-title">Mapa del Depósito</div><div class="page-sub" id="mapaHint"></div></div>
     <button class="btn btn-gold" onclick="mapaScan()">📷 Escanear</button>
   </div>
+  <div class="mp-day" id="mapaDia"></div>
   <div class="mp-leg">🟥 pendiente de pago · 🟩 pagado · 🟦 pagado con despacho programado a futuro · borde dorado = ya hay cajas del mismo cliente</div>
   <div class="mp-grid" id="mapaGrid"></div>
   <div class="qcard" style="margin-top:16px"><div class="qcard-title">📍 Sin ubicar / sin estante</div><div class="mp-bs" id="mapaOtros"></div></div>
@@ -1640,6 +1646,27 @@ async function mapaSetFecha(key,v){
   renderMapa();
 }
 function pedUbiResumen(i){const l=[...new Set((i.pedidos||[]).filter(p=>p.ubicacion).map(p=>p.ubicacion.replace('Rack ','R')))];return l.length?'<div style="font-size:.62rem;color:var(--muted);margin-top:3px;">📍 pedidos: '+l.join(' | ')+'</div>':'';}
+function mapaDia(units){
+  const el=document.getElementById('mapaDia'); if(!el) return;
+  const hoy=today(), fechas=new Set(); let hechos=0;
+  const f10=x=>String(x||'').slice(0,10);
+  DEP.forEach(i=>{
+    const ps=i.pedidos||[];
+    if(ps.length) ps.forEach(p=>{const f=f10(p.fechaSalida);if(f){fechas.add(f);if(f===hoy)hechos++;}});
+    else if(i.retirado&&i.fechaSalida){const f=f10(i.fechaSalida);fechas.add(f);if(f===hoy)hechos++;}
+  });
+  let listos=0,prog=0,cobrar=0;
+  units.forEach(u=>{const e=mapaEstado(u);if(e==='ok')listos++;else if(e==='fu')prog++;else cobrar++;});
+  const total=hechos+listos, pct=total?Math.round(hechos*100/total):100;
+  let racha=0; const d=new Date();
+  for(let k=0;k<400;k++){const dow=d.getDay(),f=d.toISOString().slice(0,10);
+    if(dow!==0&&dow!==6){ if(fechas.has(f)) racha++; else if(f!==hoy) break; }
+    d.setDate(d.getDate()-1);}
+  el.innerHTML=`<b>${total&&hechos>=total?'🎉 ¡Día completo!':'📦 Hoy'}</b> — ${hechos} de ${total} despachados`
+   +`<div class="mp-bar"><div style="width:${pct}%"></div></div>`
+   +`<div class="mp-chips"><span>🟩 listos para despachar: <b>${listos}</b></span><span>🟦 programados: <b>${prog}</b></span><span>🟥 a cobrar: <b>${cobrar}</b></span>`
+   +(racha?`<span>🔥 racha: <b>${racha}</b> día${racha>1?'s':''} hábil${racha>1?'es':''} despachando</span>`:'')+`</div>`;
+}
 function renderMapa(){
   const el=document.getElementById('mapaGrid'); if(!el) return;
   const units=mapaUnits();
@@ -1647,13 +1674,14 @@ function renderMapa(){
   const slot={}, otros=[];
   units.forEach(x=>{const p=ubiParse(x.ubi); if(p&&p.e&&MAPA_RACKS.includes(p.r)){const k=p.r+'-'+p.e;(slot[k]=slot[k]||[]).push(x);} else otros.push(x);});
   const blk=x=>`<div class="mp-b mp-${mapaEstado(x)}${x.key===mapaSel?' sel':''}" onclick="mapaPick('${x.key}',event)" title="${x.tip}"><b>${ubiEsInsumos(x.ubi)?'⭐ ':''}${x.label}</b><small>${daysDiff(x.dep.fechaIngreso)}d · ${mapaTxt(x)}</small></div>`;
-  el.innerHTML=MAPA_RACKS.map(r=>`<div class="mp-rack"><div class="mp-rt">Rack ${r}</div>`+[3,2,1].map(e=>{
+  el.innerHTML=MAPA_RACKS.map(r=>`<div class="mp-rack"><div class="mp-rt">Rack ${r} <small style="font-family:'DM Mono',monospace;font-size:.65rem;color:var(--muted)">· ${[1,2,3].reduce((a,e)=>a+(slot[r+'-'+e]||[]).length,0)} pedidos</small></div>`+[3,2,1].map(e=>{
     const ins=e===3, items=slot[r+'-'+e]||[];
     const glow=sel&&!ins&&items.some(x=>x.dep.cliente===sel.dep.cliente&&x.key!==sel.key)?' mp-match':'';
     const lbl=ins?'Insumos (solo excepciones ⭐)':(r===3?ZONA_R3[e]:'Estante '+e);
     return `<div class="mp-sh${ins?' mp-ins':''}${glow}" onclick="mapaDrop(${r},${e})"><div class="mp-sl">E${e} · ${lbl}</div><div class="mp-bs">${items.map(blk).join('')}</div></div>`;
   }).join('')+'</div>').join('');
   document.getElementById('mapaOtros').innerHTML=otros.length?otros.map(blk).join(''):'<span style="color:var(--muted);font-size:.8rem">Todo ubicado 🎉</span>';
+  mapaDia(units);
   document.getElementById('mapaHint').innerHTML=sel?`🖐️ En mano: <b>${sel.tip}</b> (${mapaTxt(sel)}) — tocá un estante para dejarlo. <span class="mp-x" onclick="mapaSel=null;renderMapa()">soltar</span><br><span style="font-size:.74rem">📅 Despacho programado: <input type="date" value="${sel.fp||''}" onchange="mapaSetFecha('${sel.key}',this.value)" style="border:1px solid var(--border);border-radius:5px;padding:1px 4px;"></span>`:'Tocá una caja o pedido para tomarlo y después un estante para dejarlo.';
 }
 function mapaPick(key,ev){ev.stopPropagation();mapaSel=mapaSel===key?null:key;renderMapa();}
