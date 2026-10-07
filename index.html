@@ -371,7 +371,7 @@ tr:hover td{background:var(--cream);}
 .mp-bs{display:flex;flex-wrap:wrap;gap:4px}
 .mp-b{border-radius:6px;padding:4px 6px;color:#fff;font-size:.68rem;cursor:pointer;display:flex;flex-direction:column;animation:mpPop .3s}
 .mp-b small{opacity:.85;font-size:.58rem}
-.mp-ok{background:var(--green)}.mp-pe{background:var(--amber)}.mp-al{background:var(--red)}
+.mp-ok{background:var(--green)}.mp-pe{background:var(--red)}.mp-fu{background:#2F6FA8}
 .mp-b.sel{outline:3px solid var(--gold);transform:translateY(-3px) scale(1.08)}
 @keyframes mpPop{from{transform:scale(.4);opacity:0}}
 .mp-x{color:var(--wine);cursor:pointer;text-decoration:underline;font-size:.8rem}
@@ -587,7 +587,7 @@ function json(obj) { return ContentService.createTextOutput(JSON.stringify(obj))
     <div><div class="page-title">Mapa del Depósito</div><div class="page-sub" id="mapaHint"></div></div>
     <button class="btn btn-gold" onclick="mapaScan()">📷 Escanear</button>
   </div>
-  <div class="mp-leg">🟩 pagado · 🟧 pendiente de pago · 🟥 alerta (muchos días / pagado sin despachar) · borde dorado = ya hay cajas del mismo cliente</div>
+  <div class="mp-leg">🟥 pendiente de pago · 🟩 pagado · 🟦 pagado con despacho programado a futuro · borde dorado = ya hay cajas del mismo cliente</div>
   <div class="mp-grid" id="mapaGrid"></div>
   <div class="qcard" style="margin-top:16px"><div class="qcard-title">📍 Sin ubicar / sin estante</div><div class="mp-bs" id="mapaOtros"></div></div>
 </div>
@@ -1622,14 +1622,22 @@ function mapaUnits(){
   const u=[];
   DEP.filter(i=>!i.retirado).forEach(i=>{
     const peds=(i.pedidos||[]);
-    if(peds.length) peds.forEach((p,k)=>{ if(p.salida) return; u.push({key:i.id+':'+k,dep:i,idx:k,ped:p,ubi:p.ubicacion||i.ubicacion||'',pago:p.pago,label:(i.cliente||'?').slice(0,8)+' P'+(k+1),tip:(i.cliente||'')+' · Pedido '+(k+1)+(p.destinatario?' · '+p.destinatario:'')}); });
-    else u.push({key:i.id,dep:i,idx:null,ped:null,ubi:i.ubicacion||'',pago:i.pago,label:(i.cliente||'?').slice(0,10),tip:(i.cliente||'')+' · '+(i.negocio||'')});
+    if(peds.length) peds.forEach((p,k)=>{ if(p.salida) return; u.push({key:i.id+':'+k,dep:i,idx:k,ped:p,ubi:p.ubicacion||i.ubicacion||'',pago:p.pago,fp:p.despachoProgramado||'',label:(i.cliente||'?').slice(0,8)+' P'+(k+1),tip:(i.cliente||'')+' · Pedido '+(k+1)+(p.destinatario?' · '+p.destinatario:'')}); });
+    else u.push({key:i.id,dep:i,idx:null,ped:null,ubi:i.ubicacion||'',pago:i.pago,fp:(i.shipping&&i.shipping.despachoProgramado)||'',label:(i.cliente||'?').slice(0,10),tip:(i.cliente||'')+' · '+(i.negocio||'')});
   });
   return u;
 }
 function mapaEstado(u){
-  if(u.idx===null) return getAlertClass(u.dep)?'al':(isPagoPaid(u.pago)?'ok':'pe');
-  return daysDiff(u.dep.fechaIngreso)>=ALERTA_DEP_DIAS?'al':(isPagoPaid(u.pago)?'ok':'pe');
+  if(!isPagoPaid(u.pago)) return 'pe';
+  return (u.fp&&u.fp>today())?'fu':'ok';
+}
+function mapaTxt(u){const e=mapaEstado(u);return e==='pe'?'a cobrar':e==='fu'?'📅 '+u.fp.slice(8,10)+'/'+u.fp.slice(5,7):'pagado';}
+async function mapaSetFecha(key,v){
+  const u=mapaUnits().find(x=>x.key===key); if(!u) return;
+  if(u.idx!==null){await updatePedido(u.dep.id,u.idx,'despachoProgramado',v);return;}
+  const sh={...(u.dep.shipping||{}),despachoProgramado:v}; u.dep.shipping=sh;
+  try{await api({action:'update',target:'deposito',id:u.dep.id,field:'shipping',value:JSON.stringify(sh)});showToast('Guardado ✅','success');}catch(e){showToast('Error al guardar','error');}
+  renderMapa();
 }
 function pedUbiResumen(i){const l=[...new Set((i.pedidos||[]).filter(p=>p.ubicacion).map(p=>p.ubicacion.replace('Rack ','R')))];return l.length?'<div style="font-size:.62rem;color:var(--muted);margin-top:3px;">📍 pedidos: '+l.join(' | ')+'</div>':'';}
 function renderMapa(){
@@ -1638,7 +1646,7 @@ function renderMapa(){
   const sel=units.find(x=>x.key===mapaSel); if(mapaSel&&!sel) mapaSel=null;
   const slot={}, otros=[];
   units.forEach(x=>{const p=ubiParse(x.ubi); if(p&&p.e&&MAPA_RACKS.includes(p.r)){const k=p.r+'-'+p.e;(slot[k]=slot[k]||[]).push(x);} else otros.push(x);});
-  const blk=x=>`<div class="mp-b mp-${mapaEstado(x)}${x.key===mapaSel?' sel':''}" onclick="mapaPick('${x.key}',event)" title="${x.tip}"><b>${ubiEsInsumos(x.ubi)?'⭐ ':''}${x.label}</b><small>${daysDiff(x.dep.fechaIngreso)}d · ${isPagoPaid(x.pago)?'pagado':'a cobrar'}</small></div>`;
+  const blk=x=>`<div class="mp-b mp-${mapaEstado(x)}${x.key===mapaSel?' sel':''}" onclick="mapaPick('${x.key}',event)" title="${x.tip}"><b>${ubiEsInsumos(x.ubi)?'⭐ ':''}${x.label}</b><small>${daysDiff(x.dep.fechaIngreso)}d · ${mapaTxt(x)}</small></div>`;
   el.innerHTML=MAPA_RACKS.map(r=>`<div class="mp-rack"><div class="mp-rt">Rack ${r}</div>`+[3,2,1].map(e=>{
     const ins=e===3, items=slot[r+'-'+e]||[];
     const glow=sel&&!ins&&items.some(x=>x.dep.cliente===sel.dep.cliente&&x.key!==sel.key)?' mp-match':'';
@@ -1646,7 +1654,7 @@ function renderMapa(){
     return `<div class="mp-sh${ins?' mp-ins':''}${glow}" onclick="mapaDrop(${r},${e})"><div class="mp-sl">E${e} · ${lbl}</div><div class="mp-bs">${items.map(blk).join('')}</div></div>`;
   }).join('')+'</div>').join('');
   document.getElementById('mapaOtros').innerHTML=otros.length?otros.map(blk).join(''):'<span style="color:var(--muted);font-size:.8rem">Todo ubicado 🎉</span>';
-  document.getElementById('mapaHint').innerHTML=sel?`🖐️ En mano: <b>${sel.tip}</b> (${isPagoPaid(sel.pago)?'pagado':'a cobrar'}) — tocá un estante para dejarlo. <span class="mp-x" onclick="mapaSel=null;renderMapa()">soltar</span>`:'Tocá una caja o pedido para tomarlo y después un estante para dejarlo.';
+  document.getElementById('mapaHint').innerHTML=sel?`🖐️ En mano: <b>${sel.tip}</b> (${mapaTxt(sel)}) — tocá un estante para dejarlo. <span class="mp-x" onclick="mapaSel=null;renderMapa()">soltar</span><br><span style="font-size:.74rem">📅 Despacho programado: <input type="date" value="${sel.fp||''}" onchange="mapaSetFecha('${sel.key}',this.value)" style="border:1px solid var(--border);border-radius:5px;padding:1px 4px;"></span>`:'Tocá una caja o pedido para tomarlo y después un estante para dejarlo.';
 }
 function mapaPick(key,ev){ev.stopPropagation();mapaSel=mapaSel===key?null:key;renderMapa();}
 async function mapaSetUbi(depId,idx,u){
@@ -1875,6 +1883,10 @@ function pedidoCard(depId, ped, idx){
         <select onchange="updatePedido('${depId}',${idx},'ubicacion',this.value)">
           ${ubiOpciones(ped.ubicacion||'').map(o=>`<option value="${o}" ${o===(ped.ubicacion||'')?'selected':''}>${o?ubiLabel(o):'— igual que el envío —'}</option>`).join('')}
         </select>
+      </div>
+      <div class="pedido-field">
+        <span class="pedido-label">Despacho programado</span>
+        <input type="date" value="${ped.despachoProgramado||''}" onchange="updatePedido('${depId}',${idx},'despachoProgramado',this.value)">
       </div>
     </div>
     <div class="pedido-actions">
@@ -2602,7 +2614,7 @@ async function updatePedido(depId, idx, field, value){
   try{
     await api({action:'update', target:'deposito', id:depId, field:'pedidos', value:JSON.stringify(item.pedidos)});
     showToast('Guardado ✅','success');
-    if(field==='ubicacion') renderMapa();
+    renderMapa();
   }catch(e){ showToast('Error al guardar','error'); }
 }
 
@@ -3338,6 +3350,7 @@ async function saveShipping(){
   const sh = readShippingInputs();
   try{
     if(shipSubIdx===null){
+      sh.despachoProgramado = (item.shipping||{}).despachoProgramado||sh.despachoProgramado||'';
       item.shipping = sh;
       await api({action:'update', target:'deposito', id:shipDepId, field:'shipping', value:JSON.stringify(sh)});
     } else {
@@ -3572,6 +3585,7 @@ async function confirmSmartPaste(){
       if(pago) await api({action:'update',target:'deposito',id:depId,field:'pago',value:pago});
       if(pagoChanged) await api({action:'update',target:'deposito',id:depId,field:'fechaPago',value:today()});
       if(botellas) await api({action:'update',target:'deposito',id:depId,field:'botellas',value:botellas});
+      sh.despachoProgramado = (item.shipping||{}).despachoProgramado||'';
       await api({action:'update',target:'deposito',id:depId,field:'shipping',value:JSON.stringify(sh)});
     } else {
       if(!item.pedidos || !item.pedidos[subIdx]) throw new Error('sub no encontrado');
