@@ -388,6 +388,14 @@ tr:hover td{background:var(--cream);}
 .mp-bar>div{height:100%;background:linear-gradient(90deg,var(--green),#4CAF72);border-radius:20px;transition:width .6s}
 .mp-chips{display:flex;flex-wrap:wrap;gap:6px;font-size:.74rem}
 .mp-chips span{background:var(--ivory);border:1px solid var(--border);border-radius:20px;padding:2px 10px}
+.mp-trucks{display:flex;gap:10px;margin-bottom:12px;flex-wrap:wrap}
+.mp-truck{flex:1;min-width:110px;background:#fff;border:2px dashed var(--border);border-radius:12px;padding:6px 8px;cursor:pointer;text-align:center;overflow:hidden;transition:.15s}
+.mp-truck.rdy{border:2px solid var(--green);box-shadow:0 0 0 3px rgba(46,125,82,.18)}
+.mp-truck.sug{border-color:var(--gold);box-shadow:0 0 0 3px rgba(201,168,76,.4)}
+.mp-truck svg{display:block;margin:0 auto;width:100px;height:auto}
+.mp-truck small{font-size:.66rem;color:var(--muted)}
+.mp-truck.go svg{animation:mpGo 1.1s ease-in forwards}
+@keyframes mpGo{0%{transform:translateX(0)}25%{transform:translateX(-10px)}100%{transform:translateX(340px);opacity:0}}
 </style>
 </head>
 <body>
@@ -594,6 +602,7 @@ function json(obj) { return ContentService.createTextOutput(JSON.stringify(obj))
   </div>
   <div class="mp-day" id="mapaDia"></div>
   <div class="mp-leg">🟥 pendiente de pago · 🟩 pagado · 🟦 pagado con despacho programado a futuro · borde dorado = ya hay cajas del mismo cliente</div>
+  <div class="mp-trucks" id="mapaTrucks"></div>
   <div class="mp-grid" id="mapaGrid"></div>
   <div class="qcard" style="margin-top:16px"><div class="qcard-title">📍 Sin ubicar / sin estante</div><div class="mp-bs" id="mapaOtros"></div></div>
 </div>
@@ -1646,6 +1655,37 @@ async function mapaSetFecha(key,v){
   renderMapa();
 }
 function pedUbiResumen(i){const l=[...new Set((i.pedidos||[]).filter(p=>p.ubicacion).map(p=>p.ubicacion.replace('Rack ','R')))];return l.length?'<div style="font-size:.62rem;color:var(--muted);margin-top:3px;">📍 pedidos: '+l.join(' | ')+'</div>':'';}
+const MAPA_CAMIONES=[{n:'FedEx',c:'#4D148C',t:'#fff',a:'#FF6600'},{n:'DHL',c:'#FFCC00',t:'#D40511',a:'#D40511'},{n:'UPS',c:'#4A2C1A',t:'#FFB500',a:'#FFB500'},{n:'Mailex',c:'#1F6F8B',t:'#fff',a:'#F2A900'}];
+function camionSvg(k){return `<svg viewBox="0 0 120 58" xmlns="http://www.w3.org/2000/svg"><rect x="3" y="6" width="74" height="34" rx="4" fill="${k.c}"/><rect x="3" y="32" width="74" height="4" fill="${k.a}"/><text x="40" y="26" text-anchor="middle" font-family="Arial,sans-serif" font-weight="800" font-size="16" fill="${k.t}">${k.n}</text><path d="M79 14h20l13 14v12H79z" fill="${k.c}"/><path d="M92 18h6l8 9H92z" fill="#cfe8ff"/><circle cx="24" cy="43" r="7" fill="#222"/><circle cx="24" cy="43" r="3" fill="#aaa"/><circle cx="94" cy="43" r="7" fill="#222"/><circle cx="94" cy="43" r="3" fill="#aaa"/></svg>`;}
+function mapaCamiones(sel){
+  const box=document.getElementById('mapaTrucks'); if(!box) return;
+  if(!box.dataset.ok){box.dataset.ok='1';box.innerHTML=MAPA_CAMIONES.map(k=>`<div class="mp-truck" id="mpt-${k.n}" onclick="mapaTruck('${k.n}')">${camionSvg(k)}<small id="mpc-${k.n}"></small></div>`).join('');}
+  const hoy=today(), f10=x=>String(x||'').slice(0,10), cnt={};
+  DEP.forEach(i=>{const ps=i.pedidos||[];
+    if(ps.length) ps.forEach(p=>{if(p.transportistaSalida&&f10(p.fechaSalida)===hoy) cnt[p.transportistaSalida]=(cnt[p.transportistaSalida]||0)+1;});
+    else if(i.retirado&&i.transporte&&f10(i.fechaSalida)===hoy) cnt[i.transporte]=(cnt[i.transporte]||0)+1;});
+  const prev=sel?(sel.idx!==null?(sel.ped.transportistaSalida||''):(sel.dep.transporte||'')):'';
+  const listo=sel&&mapaEstado(sel)!=='pe';
+  MAPA_CAMIONES.forEach(k=>{const t=document.getElementById('mpt-'+k.n); if(!t) return;
+    t.classList.toggle('rdy',!!listo); t.classList.toggle('sug',!!listo&&prev===k.n);
+    document.getElementById('mpc-'+k.n).textContent='salieron hoy: '+(cnt[k.n]||0);});
+}
+async function mapaTruck(n){
+  const u=mapaUnits().find(x=>x.key===mapaSel);
+  if(!u){mapaBeep(false);showToast('Primero tocá un pedido pagado para cargarlo en el camión','error');return;}
+  const e=mapaEstado(u);
+  if(e==='pe'){mapaBeep(false);showToast('⚠️ '+u.label+' está a cobrar: no se puede despachar','error');return;}
+  const prev=u.idx!==null?(u.ped.transportistaSalida||''):(u.dep.transporte||'');
+  let msg='¿Despachar '+u.tip+' con '+n+'?';
+  if(e==='fu') msg+='\n\n📅 Tiene despacho programado para el '+u.fp.slice(8,10)+'/'+u.fp.slice(5,7)+'.';
+  if(prev&&prev!==n) msg+='\n\nTenía asignado '+prev+'; se va a cambiar a '+n+'.';
+  if(!confirm(msg)) return;
+  mapaSel=null;
+  const tk=document.getElementById('mpt-'+n); if(tk){tk.classList.add('go');setTimeout(()=>tk.classList.remove('go'),1600);}
+  mapaBeep(true);
+  if(u.idx!==null){u.dep.pedidos[u.idx].transportistaSalida=n;await registrarSalidaSub(u.dep.id,u.idx);}
+  else{try{await api({action:'update',target:'deposito',id:u.dep.id,field:'transporte',value:n});}catch(x){} await registrarSalida(u.dep.id);}
+}
 function mapaDia(units){
   const el=document.getElementById('mapaDia'); if(!el) return;
   const hoy=today(), fechas=new Set(); let hechos=0;
@@ -1681,8 +1721,9 @@ function renderMapa(){
     return `<div class="mp-sh${ins?' mp-ins':''}${glow}" onclick="mapaDrop(${r},${e})"><div class="mp-sl">E${e} · ${lbl}</div><div class="mp-bs">${items.map(blk).join('')}</div></div>`;
   }).join('')+'</div>').join('');
   document.getElementById('mapaOtros').innerHTML=otros.length?otros.map(blk).join(''):'<span style="color:var(--muted);font-size:.8rem">Todo ubicado 🎉</span>';
+  mapaCamiones(sel);
   mapaDia(units);
-  document.getElementById('mapaHint').innerHTML=sel?`🖐️ En mano: <b>${sel.tip}</b> (${mapaTxt(sel)}) — tocá un estante para dejarlo. <span class="mp-x" onclick="mapaSel=null;renderMapa()">soltar</span><br><span style="font-size:.74rem">📅 Despacho programado: <input type="date" value="${sel.fp||''}" onchange="mapaSetFecha('${sel.key}',this.value)" style="border:1px solid var(--border);border-radius:5px;padding:1px 4px;"></span>`:'Tocá una caja o pedido para tomarlo y después un estante para dejarlo.';
+  document.getElementById('mapaHint').innerHTML=sel?`🖐️ En mano: <b>${sel.tip}</b> (${mapaTxt(sel)}) — tocá un estante para dejarlo o un camión para despacharlo. <span class="mp-x" onclick="mapaSel=null;renderMapa()">soltar</span><br><span style="font-size:.74rem">📅 Despacho programado: <input type="date" value="${sel.fp||''}" onchange="mapaSetFecha('${sel.key}',this.value)" style="border:1px solid var(--border);border-radius:5px;padding:1px 4px;"></span>`:'Tocá una caja o pedido para tomarlo y después un estante para dejarlo.';
 }
 function mapaPick(key,ev){ev.stopPropagation();mapaSel=mapaSel===key?null:key;renderMapa();}
 async function mapaSetUbi(depId,idx,u){
