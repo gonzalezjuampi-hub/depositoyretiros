@@ -401,6 +401,31 @@ tr:hover td{background:var(--cream);}
 .mh-bar{flex:1;display:flex;height:18px;background:var(--cream);border-radius:6px;overflow:hidden}
 .mh-bar i{display:block;height:100%}
 .mh-t{width:28px;text-align:right;font-weight:700}
+.ins-t{width:100%;border-collapse:separate;border-spacing:0;background:#fff;border:1.5px solid var(--border);border-radius:12px;overflow:hidden;margin-bottom:16px}
+.ins-t th{padding:8px;font-size:.8rem;text-align:center}
+.ins-t th:first-child{background:var(--wine-dk);color:#fff;text-align:left}
+.ins-t td{padding:6px;border-top:1px solid var(--border);text-align:center;font-size:.8rem}
+.ins-t td:first-child{text-align:left;font-weight:600}
+.ins-cat td{background:var(--cream);font-family:"DM Mono",monospace;font-size:.68rem;color:var(--muted);letter-spacing:.06em}
+.ins-na{color:#bbb;background:#f6f3ee}
+.ins-q{display:flex;align-items:center;justify-content:center;gap:6px}
+.ins-q button{width:26px;height:26px;border:0;border-radius:7px;background:var(--b);color:var(--bt);font-weight:800;cursor:pointer}
+.ins-q b{min-width:30px;font-size:1rem;cursor:pointer}
+.ins-c small{display:block;font-size:.62rem;color:var(--muted);cursor:pointer;margin-top:2px}
+.ins-low{background:#FFECEC}.ins-low small{color:#C62828;font-weight:700}
+.ins-ped{background:#E8F0FF}.ins-ped small{color:#2F6FA8;font-weight:700}
+.ins-li{display:flex;justify-content:space-between;align-items:center;gap:8px;padding:5px 0;border-bottom:1px solid var(--border);font-size:.82rem}
+.ins-warn{border:2px solid var(--red)}
+.ins-ok{font-size:.82rem;color:var(--muted)}
+.ins-enc{font-size:.76rem;color:#2F6FA8;margin-top:8px}
+.ins-arm{display:grid;grid-template-columns:repeat(auto-fill,minmax(160px,1fr));gap:10px}
+.ins-ac{border:1.5px solid var(--border);border-radius:10px;overflow:hidden;text-align:center;background:#fff}
+.ins-ah{padding:5px 8px;font-size:.76rem;font-weight:700;display:flex;justify-content:space-between;gap:4px;text-align:left}
+.ins-ae{cursor:pointer}
+.ins-an{font-size:2rem;font-weight:800;color:var(--green);line-height:1.2;padding-top:4px}
+.ins-an.z{color:var(--red)}
+.ins-ac small{display:block;font-size:.62rem;color:var(--muted);padding:0 6px 4px}
+.ins-del{color:#bbb;cursor:pointer;margin-left:6px;font-size:.7rem}
 </style>
 </head>
 <body>
@@ -439,17 +464,37 @@ tr:hover td{background:var(--cream);}
         <div class="step-desc">
           Borrá todo y pegá este código. Luego guardá (Ctrl+S):
           <div class="script-box" id="scriptBox"><button class="copy-btn" onclick="copyScript()">Copiar</button>
-const SHEETS = { deposito: "Deposito", retiros: "Retiros" };
+const SHEETS = { deposito: "Deposito", retiros: "Retiros", insumos: "Insumos", recetas: "Recetas" };
 const HEADERS = {
   deposito: ["id","cliente","negocio","subtipo","transporte","botellas","pago","fechaIngreso","destino","notas","retirado","fechaSalida","pedidos","ubicacion","fechaPago","shipping"],
-  retiros:  ["id","cliente","zona","negocio","transportistaRetiro","fechaRetiro","retirado","ingresado","transportistaSalida","notas","esExcepcion","fechaCreacion","subpedidos"]
+  retiros:  ["id","cliente","zona","negocio","transportistaRetiro","fechaRetiro","retirado","ingresado","transportistaSalida","notas","esExcepcion","fechaCreacion","subpedidos"],
+  insumos:  ["id","grupo","categoria","item","stock","minimo","pedido","fechaPedido"],
+  recetas:  ["id","nombre","grupo","componentes"]
 };
 
 function getOrCreateSheet(name, headers) {
   const ss = SpreadsheetApp.getActiveSpreadsheet();
   let sh = ss.getSheetByName(name);
-  if (!sh) { sh = ss.insertSheet(name); sh.appendRow(headers); }
+  if (!sh) { sh = ss.insertSheet(name); sh.appendRow(headers); if (name === "Insumos") seedInsumos(sh); }
   return sh;
+}
+
+function seedInsumos(sh) {
+  var T = ["FedEx","DHL","UPS"], D = ["DHL"], FU = ["FedEx","UPS"], F = ["FedEx"];
+  var L = [];
+  ["CAJAS DE CARTÓN|Cajas","TELGOPOR|Telgopor","TAPAS|Tapas"].forEach(function(c) {
+    var p = c.split("|");
+    L.push([p[0], p[1]+" x 2", T], [p[0], p[1]+" x 3", D], [p[0], p[1]+" x 4", FU], [p[0], p[1]+" x 6", T]);
+  });
+  L.push(["BANDEJAS","Bandejas x 2",F], ["BANDEJAS","Bandejas x 6",F]);
+  ["Sobres cartón","Bolsas S","Bolsas M","Bolsas L"].forEach(function(n) { L.push(["DOCUMENTACIÓN",n,T]); });
+  L.push(["DOCUMENTACIÓN","Sobres Burbuja",F]);
+  ["Pack S","Pack M","Pack L","Ventanas"].forEach(function(n) { L.push(["DOCUMENTACIÓN",n,T]); });
+  ["Cintas","Pluribol","Film"].forEach(function(n) { L.push(["LIBRERÍA Y DEPOT",n,["Posca"]]); });
+  ["Resma","Hoja p/ fajas"].forEach(function(n) { L.push(["LIBRERÍA Y DEPOT",n,["Librería"]]); });
+  var rows = [];
+  L.forEach(function(it) { it[2].forEach(function(g) { rows.push([g+"|"+it[1], g, it[0], it[1], 0, 0, "", ""]); }); });
+  sh.getRange(2, 1, rows.length, 8).setValues(rows);
 }
 
 function sheetToObjects(sh) {
@@ -550,6 +595,7 @@ function json(obj) { return ContentService.createTextOutput(JSON.stringify(obj))
   <div class="sidebar-section">
     <div class="nav-item" onclick="showView('deposito',this)"><span class="nav-icon">📦</span>Stock<span class="nav-badge" id="badgeStock">0</span></div>
     <div class="nav-item" onclick="showView('mapa',this)"><span class="nav-icon">🗺️</span>Mapa</div>
+    <div class="nav-item" onclick="showView('insumos',this)"><span class="nav-icon">🧰</span>Insumos<span class="nav-badge" id="badgeIns">0</span></div>
     <div class="nav-item" onclick="showView('prioridad',this)"><span class="nav-icon">🚨</span>Cola Prioridad<span class="nav-badge" id="badgePrio">0</span></div>
     <div class="nav-item" onclick="showView('egreso',this)"><span class="nav-icon">✅</span>Registrar Salida</div>
     <div class="nav-item" onclick="showView('historial',this)"><span class="nav-icon">📋</span>Historial</div>
@@ -597,6 +643,12 @@ function json(obj) { return ContentService.createTextOutput(JSON.stringify(obj))
       <div class="today-list" id="depPrioList"></div>
     </div>
   </div>
+</div>
+
+<!-- INSUMOS -->
+<div id="view-insumos" class="view">
+  <div class="page-header"><div><div class="page-title">Insumos</div><div class="page-sub">Tocá el número para escribir la cantidad exacta · tocá “mín” para definir el stock mínimo</div></div><button class="btn btn-gold" onclick="insNuevo()">+ Ítem</button></div>
+  <div id="insBody"></div>
 </div>
 
 <!-- MAPA DEPOSITO -->
@@ -1390,6 +1442,7 @@ async function loadAll(){
     if(d.ok) DEP=(d.data||[]).map(normDep);
     if(r.ok) RET=(r.data||[]).map(normRet);
     renderAll();
+    loadInsumos();
     const t=new Date().toLocaleTimeString('es-AR',{hour:'2-digit',minute:'2-digit'});
     document.getElementById('lastSyncTime').textContent='Sync: '+t;
     setSyncStatus('ok','● Sync');
@@ -1629,6 +1682,176 @@ function renderAll(){ renderMapa(); renderDashboard(); renderStock(); renderPrio
 // ═══════════════════════════════════════
 //  MAPA DEL DEPÓSITO
 // ═══════════════════════════════════════
+// ═══════════════════════════════════════
+//  INSUMOS
+// ═══════════════════════════════════════
+let INS=[], INS_ERR=false; const insTimers={};
+const INS_COL={
+  FedEx:{h:'#4D148C',ht:'#fff',a:'#FF6600',b:'#4D148C',bt:'#fff'},
+  DHL:{h:'#FFCC00',ht:'#D40511',a:'#D40511',b:'#D40511',bt:'#FFCC00'},
+  UPS:{h:'#351C15',ht:'#FFB500',a:'#FFB500',b:'#351C15',bt:'#FFB500'},
+  Posca:{h:'#111',ht:'#fff',a:'#E01E26',b:'#E01E26',bt:'#fff'},
+  'Librería':{h:'#74ACDF',ht:'#fff',a:'#5A93C8',b:'#74ACDF',bt:'#fff'}
+};
+const INS_SEC=[{t:'📦 Insumos por courier',g:['FedEx','DHL','UPS'],lib:false},{t:'📚 Librería y depot',g:['Posca','Librería'],lib:true}];
+
+let REC=[], REC_ERR=false, recEdit=null;
+const INS_GRUPOS=['FedEx','DHL','UPS','Posca','Librería'];
+const insEsc=t=>String(t).replace(/&/g,'&amp;').replace(/"/g,'&quot;').replace(/</g,'&lt;');
+const insBad=t=>/['"\\<>]/.test(t);
+function insModal(html){const m=document.createElement('div');m.className='mp-scan';m.id='insMod';m.innerHTML='<div class="mp-sc" style="max-height:90vh;overflow:auto">'+html+'</div>';document.body.appendChild(m);}
+function insModalClose(){const m=document.getElementById('insMod');if(m)m.remove();}
+async function loadRecetas(){
+  try{
+    const r=await api({action:'get',target:'recetas'}); if(!r.ok) throw 0;
+    REC=(r.data||[]).map(x=>{let c=[];try{c=JSON.parse(x.componentes||'[]');}catch(e){} return {id:String(x.id),nombre:String(x.nombre),grupo:String(x.grupo),comp:c};});
+    REC_ERR=false;
+  }catch(e){REC_ERR=true;}
+  renderInsumos();
+}
+function insArmables(r){
+  let min=Infinity, lim='';
+  r.comp.forEach(c=>{const x=INS.find(i=>i.id===c.id); const n=x?Math.floor(x.stock/(c.q||1)):0; if(n<min){min=n;lim=x?x.item+' · '+x.grupo:'(ítem borrado)';}});
+  return {n:min===Infinity?0:min,lim:lim};
+}
+function insRenderArmados(){
+  let h='<div class="qcard" style="margin-bottom:16px"><div class="qcard-title">📦 Cajas que se pueden armar</div>';
+  if(REC_ERR) h+='<div class="ins-ok">Para guardar armados hay que actualizar Code.gs (una vez más) y volver a implementar.</div>';
+  else if(!REC.length) h+='<div class="ins-ok">Todavía no hay armados cargados. Tocá “+ Armado” y definí qué lleva cada caja (por ejemplo: 1 caja de cartón + 2 tapas + 1 telgopor).</div>';
+  else h+='<div class="ins-arm">'+REC.map(r=>{
+    const a=insArmables(r), c=INS_COL[r.grupo]||{h:'#6B6B6B',ht:'#fff'};
+    const txt=r.comp.map(k=>{const x=INS.find(i=>i.id===k.id);return k.q+'× '+(x?x.item:'?');}).join(' + ');
+    return `<div class="ins-ac"><div class="ins-ah" style="background:${c.h};color:${c.ht}"><span>${insEsc(r.nombre)}</span><span class="ins-ae" onclick="recForm('${r.id}')">✏️</span></div><div class="ins-an ${a.n===0?'z':''}">${a.n}</div><small>${a.n===0?'falta: ':'limita: '}${a.lim}</small><small>${txt}</small></div>`;
+  }).join('')+'</div>';
+  return h+'<button class="btn btn-sm btn-gold" style="margin-top:8px" onclick="recForm(null)">+ Armado</button></div>';
+}
+function recSync(add){
+  recEdit.nombre=document.getElementById('rcN').value; recEdit.grupo=document.getElementById('rcG').value;
+  if(add) recEdit.comp.push({id:'',q:1});
+  recDraw();
+}
+function recForm(id){
+  const r=id?REC.find(x=>x.id===id):null;
+  recEdit=r?{id:r.id,nombre:r.nombre,grupo:r.grupo,comp:r.comp.map(c=>({id:c.id,q:c.q}))}:{id:'',nombre:'',grupo:'FedEx',comp:[{id:'',q:1}]};
+  recDraw();
+}
+function recDraw(){
+  insModalClose(); const r=recEdit;
+  const opts=sel=>'<option value="">— elegir ítem —</option>'+INS.map(x=>`<option value="${x.id}" ${x.id===sel?'selected':''}>${x.item} · ${x.grupo}</option>`).join('');
+  insModal(`<b>${r.id?'✏️ Editar armado':'➕ Nuevo armado'}</b><input id="rcN" value="${insEsc(r.nombre)}" placeholder="Nombre (ej: Caja x 2 FedEx)"><select id="rcG" style="padding:7px;border-radius:8px">${INS_GRUPOS.concat(['General']).map(g=>`<option ${g===r.grupo?'selected':''}>${g}</option>`).join('')}</select><div style="font-size:.8rem">Lleva:</div>`
+   +r.comp.map((c,k)=>`<div style="display:flex;gap:6px;align-items:center"><input type="number" min="1" value="${c.q}" style="width:60px;flex:none" onchange="recEdit.comp[${k}].q=Math.max(1,parseInt(this.value)||1)"><select style="flex:1;padding:6px;border-radius:8px;min-width:0" onchange="recEdit.comp[${k}].id=this.value">${opts(c.id)}</select><span class="mp-x" onclick="recEdit.comp.splice(${k},1);recSync()">✕</span></div>`).join('')
+   +`<span class="mp-x" onclick="recSync(true)">+ agregar componente</span><div style="display:flex;gap:6px;flex-wrap:wrap"><button class="btn btn-wine btn-sm" onclick="recGuardar()">Guardar</button><button class="btn btn-sm" onclick="insModalClose()">Cancelar</button>${r.id?'<button class="btn btn-sm" onclick="recBorrar()">🗑️ Borrar</button>':''}</div>`);
+}
+async function recGuardar(){
+  recEdit.nombre=document.getElementById('rcN').value.trim(); recEdit.grupo=document.getElementById('rcG').value;
+  const comp=recEdit.comp.filter(c=>c.id&&c.q>0), r=recEdit;
+  if(!r.nombre||!comp.length){showToast('Poné un nombre y al menos un componente','error');return;}
+  const cj=JSON.stringify(comp);
+  try{
+    if(!r.id){const rr=await api({action:'add',target:'recetas',row:JSON.stringify({id:'R'+Date.now(),nombre:r.nombre,grupo:r.grupo,componentes:cj})}); if(!rr.ok) throw 0;}
+    else{await api({action:'update',target:'recetas',id:r.id,field:'nombre',value:r.nombre});await api({action:'update',target:'recetas',id:r.id,field:'grupo',value:r.grupo});await api({action:'update',target:'recetas',id:r.id,field:'componentes',value:cj});}
+  }catch(e){showToast('Error al guardar (¿actualizaste Code.gs?)','error');return;}
+  insModalClose(); showToast('Armado guardado ✅','success'); loadRecetas();
+}
+async function recBorrar(){
+  if(!confirm('¿Borrar el armado "'+recEdit.nombre+'"?')) return;
+  try{await api({action:'delete',target:'recetas',id:recEdit.id});}catch(e){showToast('Error al borrar','error');return;}
+  insModalClose(); loadRecetas();
+}
+function insNuevo(){
+  const cats=[...new Set(INS.map(x=>x.cat))];
+  insModal(`<b>➕ Nuevo ítem de insumos</b><input id="niN" placeholder="Nombre (ej: Cajas x 12)"><input id="niC" list="niCL" placeholder="Categoría (ej: CAJAS DE CARTÓN)"><datalist id="niCL">${cats.map(c=>`<option value="${c}">`).join('')}</datalist><div style="font-size:.8rem">Aplica a (podés marcar varios):</div><div style="display:flex;flex-wrap:wrap;gap:10px">${INS_GRUPOS.map(g=>`<label style="font-size:.82rem"><input type="checkbox" class="niG" value="${g}"> ${g}</label>`).join('')}</div><div style="display:flex;gap:6px"><button class="btn btn-wine btn-sm" onclick="insNuevoOk()">Guardar</button><button class="btn btn-sm" onclick="insModalClose()">Cancelar</button></div>`);
+}
+async function insNuevoOk(){
+  const n=document.getElementById('niN').value.trim(), c0=document.getElementById('niC').value.trim();
+  const gs=[...document.querySelectorAll('.niG:checked')].map(i=>i.value);
+  if(!n||!c0||!gs.length){showToast('Completá nombre, categoría y a quién aplica','error');return;}
+  if(insBad(n)||insBad(c0)){showToast('No uses comillas, apóstrofes ni signos < >','error');return;}
+  const cat=INS.map(x=>x.cat).find(x=>x.toLowerCase()===c0.toLowerCase())||c0.toUpperCase();
+  if(gs.some(g=>INS.some(x=>x.id===g+'|'+n))){showToast('Ya existe un ítem con ese nombre','error');return;}
+  try{for(const g of gs){const r=await api({action:'add',target:'insumos',row:JSON.stringify({id:g+'|'+n,grupo:g,categoria:cat,item:n,stock:0,minimo:0,pedido:'',fechaPedido:''})}); if(!r.ok) throw 0;}}
+  catch(e){showToast('Error al guardar','error');return;}
+  insModalClose(); showToast('Ítem agregado ✅','success'); loadInsumos();
+}
+async function insDelItem(cat,item){
+  const rows=INS.filter(x=>x.cat===cat&&x.item===item); if(!rows.length) return;
+  if(!confirm('¿Borrar "'+item+'" ('+rows.map(x=>x.grupo).join(', ')+') junto con su stock? Los armados que lo usen quedarán sin ese componente.')) return;
+  try{for(const x of rows) await api({action:'delete',target:'insumos',id:x.id});}catch(e){showToast('Error al borrar','error');return;}
+  loadInsumos();
+}
+const insBajo=x=>x.min>0&&x.stock<=x.min;
+async function loadInsumos(){
+  if(Object.keys(insTimers).length) return;
+  try{
+    const r=await api({action:'get',target:'insumos'}); if(!r.ok) throw 0;
+    INS=(r.data||[]).map(x=>({id:String(x.id),grupo:String(x.grupo),cat:String(x.categoria),item:String(x.item),stock:Number(x.stock)||0,min:Number(x.minimo)||0,pedido:x.pedido===true||x.pedido==='TRUE',fp:String(x.fechaPedido||'')}));
+    INS_ERR=false;
+  }catch(e){INS_ERR=true;}
+  renderInsumos(); if(!INS_ERR) loadRecetas();
+}
+async function insPut(id,field,value){try{await api({action:'update',target:'insumos',id:id,field:field,value:value});}catch(e){showToast('Error al guardar','error');}}
+function insAdj(id,d){
+  const x=INS.find(i=>i.id===id); if(!x) return;
+  x.stock=Math.max(0,x.stock+d);
+  if(x.pedido&&x.stock>x.min){x.pedido=false;insPut(id,'pedido','');}
+  renderInsumos(); clearTimeout(insTimers[id]);
+  insTimers[id]=setTimeout(async()=>{await insPut(id,'stock',x.stock);delete insTimers[id];},700);
+}
+function insSet(id){
+  const x=INS.find(i=>i.id===id); if(!x) return;
+  const v=prompt('Stock actual de '+x.item+' ('+x.grupo+')',x.stock); if(v===null) return;
+  const n=parseInt(v,10); if(isNaN(n)||n<0){showToast('Número inválido','error');return;}
+  insAdj(id,n-x.stock);
+}
+function insMin(id){
+  const x=INS.find(i=>i.id===id); if(!x) return;
+  const v=prompt('Stock mínimo de '+x.item+' ('+x.grupo+')\nAl llegar a este número aparece "para pedir". 0 = sin alerta.',x.min); if(v===null) return;
+  const n=parseInt(v,10); if(isNaN(n)||n<0){showToast('Número inválido','error');return;}
+  x.min=n; if(x.pedido&&x.stock>n){x.pedido=false;insPut(id,'pedido','');}
+  insPut(id,'minimo',n); renderInsumos();
+}
+async function insPedido(id){
+  const x=INS.find(i=>i.id===id); if(!x) return;
+  x.pedido=true; x.fp=today(); renderInsumos();
+  await insPut(id,'pedido','TRUE'); await insPut(id,'fechaPedido',x.fp);
+  showToast('🛒 Pedido registrado','success');
+}
+function insCopiar(){
+  const l=INS.filter(x=>insBajo(x)&&!x.pedido).map(x=>'• '+x.item+' ('+x.grupo+'): quedan '+x.stock+' · mín '+x.min);
+  navigator.clipboard.writeText('Pedido de insumos '+new Date().toLocaleDateString('es-AR')+':\n'+l.join('\n')).then(()=>showToast('Lista copiada ✅','success'));
+}
+function insCell(x){
+  const b=insBajo(x), c=INS_COL[x.grupo]||INS_COL.FedEx;
+  return `<td class="ins-c ${b?(x.pedido?'ins-ped':'ins-low'):''}" style="--b:${c.b};--bt:${c.bt}"><div class="ins-q"><button onclick="insAdj('${x.id}',-1)">−</button><b onclick="insSet('${x.id}')">${x.stock}</b><button onclick="insAdj('${x.id}',1)">+</button></div><small onclick="insMin('${x.id}')">${x.min>0?'mín '+x.min:'definir mín'}${b?(x.pedido?' · 🛒 pedido':' · ⚠️ pedir'):''}</small></td>`;
+}
+function renderInsumos(){
+  const box=document.getElementById('insBody'); if(!box) return;
+  const bdg=document.getElementById('badgeIns');
+  if(INS_ERR){
+    if(bdg) bdg.textContent='!';
+    box.innerHTML='<div class="qcard"><div class="qcard-title">⚙️ Falta un paso, una sola vez</div><p style="font-size:.85rem;line-height:1.5">Para activar Insumos hay que actualizar el Apps Script: abrí <b>Extensiones → Apps Script</b>, reemplazá todo el código por el del archivo <b>Code.gs</b>, y en <b>Implementar → Administrar implementaciones → ✏️ → Versión: Nueva versión → Implementar</b>. La URL no cambia. Después tocá el botón de sincronizar.</p></div>';
+    return;
+  }
+  const bajos=INS.filter(insBajo), pend=bajos.filter(x=>!x.pedido), enc=bajos.filter(x=>x.pedido);
+  if(bdg) bdg.textContent=pend.length;
+  let h=`<div class="qcard ${pend.length?'ins-warn':''}" style="margin-bottom:16px"><div class="qcard-title">🛒 Para pedir (${pend.length})</div>`
+   +(pend.length?pend.map(x=>`<div class="ins-li"><span><b>${x.item}</b> · ${x.grupo} — quedan <b>${x.stock}</b> (mín ${x.min})</span><button class="btn btn-sm btn-wine" onclick="insPedido('${x.id}')">Pedido hecho</button></div>`).join('')+'<button class="btn btn-sm btn-gold" style="margin-top:8px" onclick="insCopiar()">📋 Copiar lista</button>':'<span class="ins-ok">Nada para pedir por ahora ✅ (los ítems sin mínimo definido no generan alerta)</span>')
+   +(enc.length?'<div class="ins-enc">🛒 Pedidos en camino: '+enc.map(x=>x.item+' · '+x.grupo).join(', ')+'</div>':'')+'</div>';
+  h+=insRenderArmados();
+  INS_SEC.forEach(sec=>{
+    const rows=INS.filter(x=>sec.g.includes(x.grupo)); if(!rows.length) return;
+    const cats=[]; rows.forEach(x=>{let c=cats.find(c=>c.n===x.cat);if(!c){c={n:x.cat,items:[]};cats.push(c);}if(!c.items.includes(x.item))c.items.push(x.item);});
+    h+=`<div class="qcard-title" style="margin:6px 0">${sec.t}</div><div style="overflow-x:auto"><table class="ins-t"><tr><th>Ítem</th>`
+     +sec.g.map(g=>`<th style="background:${INS_COL[g].h};color:${INS_COL[g].ht};border-bottom:3px solid ${INS_COL[g].a}">${g}</th>`).join('')+'</tr>';
+    cats.forEach(c=>{
+      if(!sec.lib) h+=`<tr class="ins-cat"><td colspan="${sec.g.length+1}">${c.n}</td></tr>`;
+      c.items.forEach(it=>{h+=`<tr><td>${it}<span class="ins-del" onclick="insDelItem('${c.n}','${it}')" title="Borrar ítem">✕</span></td>`+sec.g.map(g=>{const x=rows.find(r=>r.grupo===g&&r.cat===c.n&&r.item===it);return x?insCell(x):'<td class="ins-na">—</td>';}).join('')+'</tr>';});
+    });
+    h+='</table></div>';
+  });
+  box.innerHTML=h;
+}
+
 const MAPA_RACKS=[1,2,3,4];
 const ZONA_R3={1:'Listos · Ecommerce / Turismo',2:'Listos · Comex'};
 let mapaSel=null, mapaStream=null, mapaTimer=null;
