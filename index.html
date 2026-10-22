@@ -426,6 +426,12 @@ tr:hover td{background:var(--cream);}
 .ins-an.z{color:var(--red)}
 .ins-ac small{display:block;font-size:.62rem;color:var(--muted);padding:0 6px 4px}
 .ins-del{color:#bbb;cursor:pointer;margin-left:6px;font-size:.7rem}
+.ins-plan{margin-top:12px;background:var(--ivory);border:1.5px solid var(--border);border-radius:10px;padding:10px;font-size:.78rem}
+.ins-plan table{width:100%;border-collapse:collapse;margin-top:6px}
+.ins-plan th,.ins-plan td{padding:3px 6px;border-top:1px solid var(--border);text-align:right}
+.ins-plan th:first-child,.ins-plan td:first-child{text-align:left}
+.ins-pl{padding:2px 6px 8px;font-size:.7rem;color:var(--muted)}
+.ins-pl input{width:54px;border:1.5px solid var(--border);border-radius:6px;padding:2px 4px;text-align:center}
 </style>
 </head>
 <body>
@@ -1709,20 +1715,51 @@ async function loadRecetas(){
   }catch(e){REC_ERR=true;}
   renderInsumos();
 }
+const insEsOpc=c=>{if(c.opt===true) return true; if(c.opt===false) return false; const x=INS.find(i=>i.id===c.id); return !!x&&/^ventanas?$/i.test(String(x.item).trim());};
+let insPlan={};
+function insPlanSet(id,v){const n=parseInt(v,10); if(isNaN(n)||n<=0) delete insPlan[id]; else insPlan[id]=n; renderInsumos();}
 function insArmables(r){
-  let min=Infinity, lim='';
-  r.comp.forEach(c=>{const x=INS.find(i=>i.id===c.id); const n=x?Math.floor(x.stock/(c.q||1)):0; if(n<min){min=n;lim=x?x.item+' · '+x.grupo:'(ítem borrado)';}});
-  return {n:min===Infinity?0:min,lim:lim};
+  let min=Infinity, lim='', opt=Infinity; const ceros=[];
+  r.comp.forEach(c=>{
+    const x=INS.find(i=>i.id===c.id), n=x?Math.floor(x.stock/(c.q||1)):0, nom=x?x.item+' · '+x.grupo:'(ítem borrado)';
+    if(insEsOpc(c)){ if(n<opt) opt=n; }
+    else{ if(n===0) ceros.push(nom); if(n<min){min=n;lim=nom;} }
+  });
+  const n=min===Infinity?0:min;
+  return {n:n,lim:n===0&&ceros.length?ceros.join(', '):lim,opt:opt===Infinity?null:opt};
+}
+function insPlanHtml(){
+  const need={};
+  REC.forEach(r=>{const q=insPlan[r.id]; if(!q) return; r.comp.forEach(c=>{const k=need[c.id]||(need[c.id]={n:0,req:false}); k.n+=q*(c.q||1); if(!insEsOpc(c)) k.req=true;});});
+  const ids=Object.keys(need); if(!ids.length) return '';
+  let falta=0;
+  const rows=ids.map(id=>{
+    const x=INS.find(i=>i.id===id), st=x?x.stock:0, k=need[id], left=st-k.n;
+    if(left<0&&k.req) falta++;
+    const txt=left>=0?left:(k.req?'faltan '+(-left):'sin stock (se entrega sin eso)');
+    const col=left>=0?'inherit':(k.req?'var(--red)':'#B58900');
+    return `<tr><td>${x?x.item+' · '+x.grupo:id}${k.req?'':' <small>(opcional)</small>'}</td><td>${k.n}</td><td>${st}</td><td style="color:${col};font-weight:700">${txt}</td></tr>`;
+  }).join('');
+  return `<div class="ins-plan"><b>${falta?'⚠️ Con ese plan faltan insumos':'✅ Con ese plan alcanza'}</b><table><tr><th>Insumo</th><th>Necesitás</th><th>Hay</th><th>Quedan</th></tr>${rows}</table></div>`;
 }
 function insRenderArmados(){
   let h='<div class="qcard" style="margin-bottom:16px"><div class="qcard-title">📦 Cajas que se pueden armar</div>';
-  if(REC_ERR) h+='<div class="ins-ok">Para guardar armados hay que actualizar Code.gs (una vez más) y volver a implementar.</div>';
-  else if(!REC.length) h+='<div class="ins-ok">Todavía no hay armados cargados. Tocá “+ Armado” y definí qué lleva cada caja (por ejemplo: 1 caja de cartón + 2 tapas + 1 telgopor).</div>';
-  else h+='<div class="ins-arm">'+REC.map(r=>{
+  if(REC_ERR) return h+'<div class="ins-ok">Para guardar armados hay que actualizar Code.gs (una vez más) y volver a implementar.</div></div>';
+  if(!REC.length) return h+'<div class="ins-ok">Todavía no hay armados cargados. Tocá “+ Armado” y definí qué lleva cada caja.</div><button class="btn btn-sm btn-gold" style="margin-top:8px" onclick="recForm(null)">+ Armado</button></div>';
+  const uso={}; REC.forEach(r=>r.comp.forEach(c=>{if(!insEsOpc(c)) (uso[c.id]=uso[c.id]||new Set()).add(r.id);}));
+  const ord=[...REC].sort((a,b)=>{const f=g=>{const i=INS_GRUPOS.indexOf(g);return i<0?99:i;};return f(a.grupo)-f(b.grupo);});
+  h+='<div class="ins-ok" style="margin-bottom:8px">Cada número es lo que se puede armar <b>de esa caja sola</b>. Si varias comparten insumos (🔗), escribí abajo cuántas querés armar de cada una y se verifica si alcanza para todas juntas.</div><div class="ins-arm">'
+   +ord.map(r=>{
     const a=insArmables(r), c=INS_COL[r.grupo]||{h:'#6B6B6B',ht:'#fff'};
-    const txt=r.comp.map(k=>{const x=INS.find(i=>i.id===k.id);return k.q+'× '+(x?x.item:'?');}).join(' + ');
-    return `<div class="ins-ac"><div class="ins-ah" style="background:${c.h};color:${c.ht}"><span>${insEsc(r.nombre)}</span><span class="ins-ae" onclick="recForm('${r.id}')">✏️</span></div><div class="ins-an ${a.n===0?'z':''}">${a.n}</div><small>${a.n===0?'falta: ':'limita: '}${a.lim}</small><small>${txt}</small></div>`;
-  }).join('')+'</div>';
+    const compt=r.comp.filter(k=>!insEsOpc(k)&&uso[k.id]&&uso[k.id].size>1).map(k=>{const x=INS.find(i=>i.id===k.id);return x?x.item:'?';});
+    const txt=r.comp.map(k=>{const x=INS.find(i=>i.id===k.id);return k.q+'× '+(x?x.item:'?')+(insEsOpc(k)?' (opc.)':'');}).join(' + ');
+    const con=a.opt===null?'':Math.min(a.n,a.opt);
+    return `<div class="ins-ac"><div class="ins-ah" style="background:${c.h};color:${c.ht}"><span>${insEsc(r.nombre)}</span><span class="ins-ae" onclick="recForm('${r.id}')">✏️</span></div>`
+     +`<div class="ins-an ${a.n===0?'z':''}">${a.n}</div><small>${a.n===0?'falta: ':'limita: '}${a.lim}</small>`
+     +(a.opt===null?'':`<small>🪟 ${con} con ventana · ${a.n-con} sin</small>`)
+     +(compt.length?`<small>🔗 comparte: ${compt.join(', ')}</small>`:'')
+     +`<small>${txt}</small><div class="ins-pl">armar <input type="number" min="0" value="${insPlan[r.id]||''}" onchange="insPlanSet('${r.id}',this.value)"></div></div>`;
+  }).join('')+'</div>'+insPlanHtml();
   return h+'<button class="btn btn-sm btn-gold" style="margin-top:8px" onclick="recForm(null)">+ Armado</button></div>';
 }
 function recSync(add){
@@ -1732,19 +1769,19 @@ function recSync(add){
 }
 function recForm(id){
   const r=id?REC.find(x=>x.id===id):null;
-  recEdit=r?{id:r.id,nombre:r.nombre,grupo:r.grupo,comp:r.comp.map(c=>({id:c.id,q:c.q}))}:{id:'',nombre:'',grupo:'FedEx',comp:[{id:'',q:1}]};
+  recEdit=r?{id:r.id,nombre:r.nombre,grupo:r.grupo,comp:r.comp.map(c=>({id:c.id,q:c.q,opt:c.opt}))}:{id:'',nombre:'',grupo:'FedEx',comp:[{id:'',q:1}]};
   recDraw();
 }
 function recDraw(){
   insModalClose(); const r=recEdit;
   const opts=sel=>'<option value="">— elegir ítem —</option>'+INS.map(x=>`<option value="${x.id}" ${x.id===sel?'selected':''}>${x.item} · ${x.grupo}</option>`).join('');
   insModal(`<b>${r.id?'✏️ Editar armado':'➕ Nuevo armado'}</b><input id="rcN" value="${insEsc(r.nombre)}" placeholder="Nombre (ej: Caja x 2 FedEx)"><select id="rcG" style="padding:7px;border-radius:8px">${INS_GRUPOS.concat(['General']).map(g=>`<option ${g===r.grupo?'selected':''}>${g}</option>`).join('')}</select><div style="font-size:.8rem">Lleva:</div>`
-   +r.comp.map((c,k)=>`<div style="display:flex;gap:6px;align-items:center"><input type="number" min="1" value="${c.q}" style="width:60px;flex:none" onchange="recEdit.comp[${k}].q=Math.max(1,parseInt(this.value)||1)"><select style="flex:1;padding:6px;border-radius:8px;min-width:0" onchange="recEdit.comp[${k}].id=this.value">${opts(c.id)}</select><span class="mp-x" onclick="recEdit.comp.splice(${k},1);recSync()">✕</span></div>`).join('')
+   +r.comp.map((c,k)=>`<div style="display:flex;gap:6px;align-items:center"><input type="number" min="1" value="${c.q}" style="width:60px;flex:none" onchange="recEdit.comp[${k}].q=Math.max(1,parseInt(this.value)||1)"><select style="flex:1;padding:6px;border-radius:8px;min-width:0" onchange="recEdit.comp[${k}].id=this.value;recSync()">${opts(c.id)}</select><label style="font-size:.68rem;white-space:nowrap"><input type="checkbox" ${insEsOpc(c)?'checked':''} style="flex:none;width:auto;padding:0" onchange="recEdit.comp[${k}].opt=this.checked"> opc.</label><span class="mp-x" onclick="recEdit.comp.splice(${k},1);recSync()">✕</span></div>`).join('')
    +`<span class="mp-x" onclick="recSync(true)">+ agregar componente</span><div style="display:flex;gap:6px;flex-wrap:wrap"><button class="btn btn-wine btn-sm" onclick="recGuardar()">Guardar</button><button class="btn btn-sm" onclick="insModalClose()">Cancelar</button>${r.id?'<button class="btn btn-sm" onclick="recBorrar()">🗑️ Borrar</button>':''}</div>`);
 }
 async function recGuardar(){
   recEdit.nombre=document.getElementById('rcN').value.trim(); recEdit.grupo=document.getElementById('rcG').value;
-  const comp=recEdit.comp.filter(c=>c.id&&c.q>0), r=recEdit;
+  const comp=recEdit.comp.filter(c=>c.id&&c.q>0).map(c=>({id:c.id,q:c.q,opt:insEsOpc(c)})), r=recEdit;
   if(!r.nombre||!comp.length){showToast('Poné un nombre y al menos un componente','error');return;}
   const cj=JSON.stringify(comp);
   try{
@@ -3094,56 +3131,78 @@ function exportStockCSV(){
 
   var pago_label = {cash:'Efectivo (Cash)',paypal:'PayPal',zelle:'Zelle',cc30:'Cta Corriente 30d',pendiente:'Pendiente'};
   var prio_label = {1:'Comex Doc (URGENTE)',2:'Comex Vino',3:'Turismo/Feria/Ecomm',4:'Pendiente pago'};
-  var prio_color = {1:'FFFFE0B2',2:'FFBBDEFB',3:'FFC8E6C9',4:'FFF5F5F5'};
 
-  // Build Excel XML (SpreadsheetML) - opens perfectly in Excel with formatting
   var xml = '<?xml version="1.0" encoding="UTF-8"?><?mso-application progid="Excel.Sheet"?>';
   xml += '<Workbook xmlns="urn:schemas-microsoft-com:office:spreadsheet" xmlns:ss="urn:schemas-microsoft-com:office:spreadsheet">';
   xml += '<Styles>';
-  // Header style
   xml += '<Style ss:ID="h"><Font ss:Bold="1" ss:Color="#FFFFFF" ss:Size="10"/><Interior ss:Color="#7B1C3A" ss:Pattern="Solid"/><Alignment ss:Horizontal="Center"/></Style>';
-  // Priority styles
   xml += '<Style ss:ID="p1"><Interior ss:Color="#FFE0B2" ss:Pattern="Solid"/><Font ss:Bold="1"/></Style>';
   xml += '<Style ss:ID="p2"><Interior ss:Color="#BBDEFB" ss:Pattern="Solid"/><Font ss:Bold="1"/></Style>';
   xml += '<Style ss:ID="p3"><Interior ss:Color="#C8E6C9" ss:Pattern="Solid"/></Style>';
   xml += '<Style ss:ID="p4"><Interior ss:Color="#F5F5F5" ss:Pattern="Solid"/></Style>';
-  // Date style
-  xml += '<Style ss:ID="d"><NumberFormat ss:Format="DD/MM/YYYY"/></Style>';
-  // Normal
-  xml += '<Style ss:ID="n"><Alignment ss:WrapText="1"/></Style>';
+  xml += '<Style ss:ID="sub"><Interior ss:Color="#FFF9C4" ss:Pattern="Solid"/></Style>';
+  xml += '<Style ss:ID="subok"><Interior ss:Color="#E8F5E9" ss:Pattern="Solid"/></Style>';
   xml += '</Styles>';
-  xml += '<Worksheet ss:Name="Stock Deposito">';
-  xml += '<Table>';
-  // Column widths
-  var widths = [100,180,100,100,100,70,120,100,60,120,200];
+  xml += '<Worksheet ss:Name="Stock Deposito"><Table>';
+
+  var widths = [140,180,100,100,100,70,150,100,60,120,160,200];
   widths.forEach(function(w){ xml += '<Column ss:Width="'+w+'"/>'; });
 
-  // Header row
-  var cols = ['Prioridad','Cliente','Negocio','Subtipo','Transporte','Botellas','Forma de Pago','Fecha Ingreso','Días','Destino','Notas'];
+  var cols = ['Prioridad','Cliente','Negocio','Subtipo','Transporte','Botellas','Forma de Pago','Fecha Ingreso','Dias','Destino','Destinatario','Notas'];
   xml += '<Row ss:Height="20">';
   cols.forEach(function(c){ xml += '<Cell ss:StyleID="h"><Data ss:Type="String">'+c+'</Data></Cell>'; });
   xml += '</Row>';
 
-  // Data rows
   data.forEach(function(i){
     var p = calcPriority(i);
     var d = daysDiff(i.fechaIngreso);
     var styleId = 'p'+p;
     var fechaStr = i.fechaIngreso ? String(i.fechaIngreso).slice(0,10) : '';
+    var hasSubs = i.pedidos && i.pedidos.length > 0;
 
-    xml += '<Row ss:Height="18">';
-    xml += '<Cell ss:StyleID="'+styleId+'"><Data ss:Type="String">'+(prio_label[p]||'P'+p)+'</Data></Cell>';
-    xml += '<Cell ss:StyleID="'+styleId+'"><Data ss:Type="String">'+(i.cliente||'')+'</Data></Cell>';
-    xml += '<Cell ss:StyleID="'+styleId+'"><Data ss:Type="String">'+(i.negocio||'')+'</Data></Cell>';
-    xml += '<Cell ss:StyleID="'+styleId+'"><Data ss:Type="String">'+(i.subtipo||'')+'</Data></Cell>';
-    xml += '<Cell ss:StyleID="'+styleId+'"><Data ss:Type="String">'+(i.transporte||'')+'</Data></Cell>';
-    xml += '<Cell ss:StyleID="'+styleId+'"><Data ss:Type="String">'+(i.botellas||'')+'</Data></Cell>';
-    xml += '<Cell ss:StyleID="'+styleId+'"><Data ss:Type="String">'+(pago_label[i.pago]||i.pago||'')+'</Data></Cell>';
-    xml += '<Cell ss:StyleID="'+styleId+'"><Data ss:Type="String">'+fechaStr+'</Data></Cell>';
-    xml += '<Cell ss:StyleID="'+styleId+'"><Data ss:Type="Number">'+d+'</Data></Cell>';
-    xml += '<Cell ss:StyleID="'+styleId+'"><Data ss:Type="String">'+(i.destino||'')+'</Data></Cell>';
-    xml += '<Cell ss:StyleID="'+styleId+'"><Data ss:Type="String">'+(i.notas||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;')+'</Data></Cell>';
-    xml += '</Row>';
+    function esc(s){ return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
+    function cell(style, val, type){
+      type = type || 'String';
+      return '<Cell ss:StyleID="'+style+'"><Data ss:Type="'+type+'">'+val+'</Data></Cell>';
+    }
+
+    if(!hasSubs){
+      xml += '<Row ss:Height="18">';
+      xml += cell(styleId, prio_label[p]||'P'+p);
+      xml += cell(styleId, esc(i.cliente));
+      xml += cell(styleId, esc(i.negocio));
+      xml += cell(styleId, esc(i.subtipo));
+      xml += cell(styleId, esc(i.transporte));
+      xml += cell(styleId, esc(i.botellas));
+      xml += cell(styleId, pago_label[i.pago]||i.pago||'');
+      xml += cell(styleId, fechaStr);
+      xml += cell(styleId, d, 'Number');
+      xml += cell(styleId, esc(i.destino));
+      xml += cell(styleId, '');
+      xml += cell(styleId, esc(i.notas));
+      xml += '</Row>';
+    } else {
+      i.pedidos.forEach(function(ped, pidx){
+        if(ped.salida) return;
+        var isPendiente = !ped.pago || ped.pago === 'pendiente';
+        var subStyle = isPendiente ? 'sub' : 'subok';
+        var prioStr = (prio_label[p]||'P'+p) + ' · Sub '+(pidx+1);
+        xml += '<Row ss:Height="18">';
+        xml += cell(subStyle, prioStr);
+        xml += cell(subStyle, esc(i.cliente));
+        xml += cell(subStyle, esc(ped.negocio||i.negocio));
+        xml += cell(subStyle, esc(i.subtipo||'vino'));
+        xml += cell(subStyle, esc(ped.transportistaSalida||i.transporte));
+        xml += cell(subStyle, esc(ped.botellas));
+        xml += cell(subStyle, pago_label[ped.pago||'pendiente']||ped.pago||'Pendiente');
+        xml += cell(subStyle, fechaStr);
+        xml += cell(subStyle, d, 'Number');
+        xml += cell(subStyle, esc(ped.destino||i.destino));
+        xml += cell(subStyle, esc(ped.destinatario));
+        xml += cell(subStyle, esc(ped.notas));
+        xml += '</Row>';
+      });
+    }
   });
 
   xml += '</Table></Worksheet></Workbook>';
@@ -3152,12 +3211,11 @@ function exportStockCSV(){
   var blob = new Blob([xml], {type:'application/vnd.ms-excel;charset=utf-8'});
   var url = URL.createObjectURL(blob);
   var a = document.createElement('a');
-  a.href = url;
-  a.download = 'AWS_Stock_'+fecha+'.xls';
-  a.click();
+  a.href = url; a.download = 'AWS_Stock_'+fecha+'.xls'; a.click();
   URL.revokeObjectURL(url);
-  showToast('Excel descargado con formato','success');
+  showToast('Excel descargado con subpedidos','success');
 }
+
 
 function exportStockWhatsapp(){
   var data = DEP.filter(function(i){ return !i.retirado; });
