@@ -432,6 +432,13 @@ tr:hover td{background:var(--cream);}
 .ins-plan th:first-child,.ins-plan td:first-child{text-align:left}
 .ins-pl{padding:2px 6px 8px;font-size:.7rem;color:var(--muted)}
 .ins-pl input{width:54px;border:1.5px solid var(--border);border-radius:6px;padding:2px 4px;text-align:center}
+.mp-co{background:#E08A00}
+.mp-dir{background:#fff;border:2px dashed var(--border);border-radius:12px;padding:8px 10px;margin-bottom:12px}
+.mp-dirh{display:flex;align-items:center;gap:10px;margin-bottom:6px;font-size:.82rem}
+.mp-dirh small{display:block;font-size:.68rem;color:var(--muted)}
+.mp-dirz{display:grid;grid-template-columns:repeat(3,1fr);gap:8px}
+.mp-dz{border:2px solid;border-radius:10px;padding:4px;min-height:54px;cursor:pointer;background:var(--ivory)}
+.mp-dzh{font-size:.7rem;font-weight:800;text-align:center;border-radius:6px;padding:2px;margin-bottom:4px}
 </style>
 </head>
 <body>
@@ -664,8 +671,9 @@ function json(obj) { return ContentService.createTextOutput(JSON.stringify(obj))
     <button class="btn btn-gold" onclick="mapaScan()">📷 Escanear</button>
   </div>
   <div class="mp-day" id="mapaDia"></div>
-  <div class="mp-leg">🟥 pendiente de pago · 🟩 pagado · 🟦 pagado con despacho programado a futuro · borde dorado = ya hay cajas del mismo cliente</div>
+  <div class="mp-leg">🟥 pendiente de pago · 🟩 pagado · 🟦 pagado con despacho programado a futuro · 🟧 consolidado (viajan juntos) · borde dorado = ya hay cajas del mismo cliente</div>
   <div class="mp-trucks" id="mapaTrucks"></div>
+  <div id="mapaDirecto"></div>
   <div class="mp-grid" id="mapaGrid"></div>
   <div class="qcard" style="margin-top:16px"><div class="qcard-title">📍 Sin ubicar / sin estante</div><div class="mp-bs" id="mapaOtros"></div></div>
   <div class="qcard" id="mapaHist" style="margin-top:16px"></div>
@@ -1810,6 +1818,25 @@ function insReglasDef(){
     4:{FedEx:x('FedEx',4),DHL:x('FedEx',4),UPS:x('UPS',4)},
     6:{FedEx:eco?eco.id:x('FedEx',6),DHL:x('DHL',6),UPS:x('UPS',6)}}};
 }
+function insCajasAplica(res,bot,c){
+  Object.entries(insCajas(bot)).forEach(([sz,n])=>{
+    const rec=REC.find(r=>r.id===((REGLAS.r||{})[sz]||{})[c]);
+    if(!rec){res.avisos.push('Sin armado definido para caja x'+sz+' por '+c);return;}
+    rec.comp.forEach(k=>{const x=INS.find(i=>i.id===k.id); if(x&&/^ventanas?$/i.test(String(x.item).trim())) return; res.delta[k.id]=(res.delta[k.id]||0)+k.q*n;});
+    res.delta[c+'|Ventanas']=(res.delta[c+'|Ventanas']||0)+n;
+    res.txt.push(n+'× '+rec.nombre+' '+rec.grupo);
+  });
+}
+function insDescGrupo(grp,courier){
+  const res={delta:{},txt:[],avisos:[],flagged:false};
+  try{
+    if(!REGLAS||!REGLAS.on||!INS.length||!REC.length) return res;
+    const c=insCarrier(courier); if(!c){res.avisos.push('Falta el courier de salida'); return res;}
+    const mem=grp.filter(x=>String((x.ped&&x.ped.subtipo)||x.dep.subtipo||'vino').toLowerCase()==='vino'&&!/^Directo/.test(x.ubi||'')&&!(x.ped?x.ped.stockDesc:x.dep.stockDesc));
+    const bot=mem.reduce((a,x)=>a+x.bot,0); if(bot>0) insCajasAplica(res,bot,c);
+  }catch(e){}
+  return res;
+}
 function insDescPrepara(item,idx){
   const res={delta:{},txt:[],avisos:[],flagged:false};
   try{
@@ -1822,15 +1849,11 @@ function insDescPrepara(item,idx){
       if(String((isP&&u.subtipo)||item.subtipo||'vino').toLowerCase()!=='vino') return;
       const bot=parseInt(u.botellas,10); if(!(bot>0)) return;
       const c=insCarrier(isP?(u.transportistaSalida||item.transporte):item.transporte);
+      const ub=isP?(u.ubicacion||item.ubicacion):item.ubicacion; if(/^Directo/.test(ub||'')) return;
+      const con=isP?u.consol:(item.shipping&&item.shipping.consol); if(con){res.avisos.push((item.cliente||'Pedido')+' está consolidado: despachalo desde las camionetas del mapa para sumar las botellas'); return;}
       if(!c){res.avisos.push((item.cliente||'Pedido')+': falta el courier de salida (FedEx, DHL o UPS)'); return;}
       const antes=res.txt.length;
-      Object.entries(insCajas(bot)).forEach(([sz,n])=>{
-        const rec=REC.find(r=>r.id===((REGLAS.r||{})[sz]||{})[c]);
-        if(!rec){res.avisos.push('Sin armado definido para caja x'+sz+' por '+c);return;}
-        rec.comp.forEach(k=>{const x=INS.find(i=>i.id===k.id); if(x&&/^ventanas?$/i.test(String(x.item).trim())) return; res.delta[k.id]=(res.delta[k.id]||0)+k.q*n;});
-        res.delta[c+'|Ventanas']=(res.delta[c+'|Ventanas']||0)+n;
-        res.txt.push(n+'× '+rec.nombre+' '+rec.grupo);
-      });
+      insCajasAplica(res,bot,c);
       if(isP&&res.txt.length>antes){u.stockDesc=true;res.flagged=true;}
     });
   }catch(e){}
@@ -1966,16 +1989,16 @@ let mapaSel=null, mapaStream=null, mapaTimer=null;
 function ubiParse(u){const m=String(u||'').match(/^Rack (\d)(?: · E(\d))?$/);return m?{r:+m[1],e:m[2]?+m[2]:0}:null;}
 function ubiKey(r,e){return 'Rack '+r+' · E'+e;}
 function ubiEsInsumos(u){return /· E3$/.test(String(u||''));}
-function ubiLabel(o){return o?(ubiEsInsumos(o)?'⭐ '+o+' (insumos)':o):'— sin ubicar —';}
-function ubiOpciones(cur){const o=[''];MAPA_RACKS.forEach(r=>[1,2,3].forEach(e=>o.push(ubiKey(r,e))));o.push('Piso','Oficina','Otro');if(cur&&!o.includes(cur))o.push(cur);return o;}
+function ubiLabel(o){return o?(ubiEsInsumos(o)?'⭐ '+o+' (insumos)':(/^Directo/.test(o)?'🏭 '+o:o)):'— sin ubicar —';}
+function ubiOpciones(cur){const o=[''];MAPA_RACKS.forEach(r=>[1,2,3].forEach(e=>o.push(ubiKey(r,e))));o.push('Directo · FedEx','Directo · DHL','Directo · UPS','Piso','Oficina','Otro');if(cur&&!o.includes(cur))o.push(cur);return o;}
 function fillUbiSelect(v){const s=document.getElementById('ed-ubicacion');s.innerHTML=ubiOpciones(v).map(o=>`<option value="${o}">${ubiLabel(o)}</option>`).join('');s.value=v||'';}
 function mapaBeep(ok){try{const c=new (window.AudioContext||window.webkitAudioContext)(),o=c.createOscillator(),g=c.createGain();o.connect(g);g.connect(c.destination);o.frequency.value=ok?880:220;g.gain.value=.08;o.start();o.stop(c.currentTime+(ok?.12:.25));}catch(e){} if(navigator.vibrate)navigator.vibrate(ok?40:[80,40,80]);}
 function mapaUnits(){
   const u=[];
   DEP.filter(i=>!i.retirado).forEach(i=>{
     const peds=(i.pedidos||[]);
-    if(peds.length) peds.forEach((p,k)=>{ if(p.salida) return; u.push({key:i.id+':'+k,dep:i,idx:k,ped:p,ubi:p.ubicacion||i.ubicacion||'',pago:p.pago,fp:p.despachoProgramado||'',label:(i.cliente||'?').slice(0,8)+' P'+(k+1),tip:(i.cliente||'')+' · Pedido '+(k+1)+(p.destinatario?' · '+p.destinatario:'')}); });
-    else u.push({key:i.id,dep:i,idx:null,ped:null,ubi:i.ubicacion||'',pago:i.pago,fp:(i.shipping&&i.shipping.despachoProgramado)||'',label:(i.cliente||'?').slice(0,10),tip:(i.cliente||'')+' · '+(i.negocio||'')});
+    if(peds.length) peds.forEach((p,k)=>{ if(p.salida) return; u.push({key:i.id+':'+k,dep:i,idx:k,ped:p,ubi:p.ubicacion||i.ubicacion||'',pago:p.pago,fp:p.despachoProgramado||'',bot:parseInt(p.botellas,10)||0,consol:p.consol||'',label:(i.cliente||'?').slice(0,8)+' P'+(k+1),tip:(i.cliente||'')+' · Pedido '+(k+1)+(p.destinatario?' · '+p.destinatario:'')}); });
+    else u.push({key:i.id,dep:i,idx:null,ped:null,ubi:i.ubicacion||'',pago:i.pago,fp:(i.shipping&&i.shipping.despachoProgramado)||'',bot:parseInt(i.botellas,10)||0,consol:(i.shipping&&i.shipping.consol)||'',label:(i.cliente||'?').slice(0,10),tip:(i.cliente||'')+' · '+(i.negocio||'')});
   });
   return u;
 }
@@ -2008,18 +2031,31 @@ function mapaCamiones(sel){
     document.getElementById('mpc-'+k.n).textContent='salieron hoy: '+(cnt[k.n]||0);});
 }
 async function mapaTruck(n){
-  const u=mapaUnits().find(x=>x.key===mapaSel);
+  const units=mapaUnits(), u=units.find(x=>x.key===mapaSel);
   if(!u){mapaBeep(false);showToast('Primero tocá un pedido pagado para cargarlo en el camión','error');return;}
-  const e=mapaEstado(u);
-  if(e==='pe'){mapaBeep(false);showToast('⚠️ '+u.label+' está a cobrar: no se puede despachar','error');return;}
+  const grp=u.consol?units.filter(x=>x.consol===u.consol):[u];
+  const malo=grp.find(x=>mapaEstado(x)==='pe');
+  if(malo){mapaBeep(false);showToast('⚠️ '+malo.label+' está a cobrar: no se puede despachar'+(grp.length>1?' el grupo':''),'error');return;}
+  const fu=grp.find(x=>mapaEstado(x)==='fu');
   const prev=u.idx!==null?(u.ped.transportistaSalida||''):(u.dep.transporte||'');
-  let msg='¿Despachar '+u.tip+' con '+n+'?';
-  if(e==='fu') msg+='\n\n📅 Tiene despacho programado para el '+u.fp.slice(8,10)+'/'+u.fp.slice(5,7)+'.';
+  const bot=grp.reduce((a,x)=>a+x.bot,0);
+  let msg=grp.length>1?'¿Despachar los '+grp.length+' pedidos consolidados ('+bot+' botellas) con '+n+'?':'¿Despachar '+u.tip+' con '+n+'?';
+  if(fu) msg+='\n\n📅 Tiene despacho programado para el '+fu.fp.slice(8,10)+'/'+fu.fp.slice(5,7)+'.';
   if(prev&&prev!==n) msg+='\n\nTenía asignado '+prev+'; se va a cambiar a '+n+'.';
   if(!confirm(msg)) return;
   mapaSel=null;
   const tk=document.getElementById('mpt-'+n); if(tk){tk.classList.add('go');setTimeout(()=>tk.classList.remove('go'),1600);}
   mapaBeep(true);
+  if(grp.length>1){
+    const dscG=insDescGrupo(grp,n);
+    for(const m of grp){
+      const dep=DEP.find(i=>i.id===m.dep.id); if(!dep) continue;
+      if(m.idx!==null){const p=dep.pedidos&&dep.pedidos[m.idx]; if(!p) continue; p.transportistaSalida=n; p.stockDesc=true; await registrarSalidaSub(dep.id,m.idx);}
+      else{dep.stockDesc=true; try{await api({action:'update',target:'deposito',id:dep.id,field:'transporte',value:n});}catch(x){} await registrarSalida(dep.id);}
+    }
+    await insDescAplica(dscG);
+    return;
+  }
   if(u.idx!==null){u.dep.pedidos[u.idx].transportistaSalida=n;await registrarSalidaSub(u.dep.id,u.idx);}
   else{try{await api({action:'update',target:'deposito',id:u.dep.id,field:'transporte',value:n});}catch(x){} await registrarSalida(u.dep.id);}
 }
@@ -2071,9 +2107,10 @@ function renderMapa(){
   const el=document.getElementById('mapaGrid'); if(!el) return;
   const units=mapaUnits();
   const sel=units.find(x=>x.key===mapaSel); if(mapaSel&&!sel) mapaSel=null;
-  const slot={}, otros=[];
-  units.forEach(x=>{const p=ubiParse(x.ubi); if(p&&p.e&&MAPA_RACKS.includes(p.r)){const k=p.r+'-'+p.e;(slot[k]=slot[k]||[]).push(x);} else otros.push(x);});
-  const blk=x=>`<div class="mp-b mp-${mapaEstado(x)}${x.key===mapaSel?' sel':''}" onclick="mapaPick('${x.key}',event)" title="${x.tip}"><b>${ubiEsInsumos(x.ubi)?'⭐ ':''}${x.label}</b><small>${daysDiff(x.dep.fechaIngreso)}d · ${mapaTxt(x)}</small></div>`;
+  const slot={}, otros=[], dir={}, ctot={};
+  units.forEach(x=>{if(x.consol) ctot[x.consol]=(ctot[x.consol]||0)+x.bot;});
+  units.forEach(x=>{if(/^Directo · /.test(x.ubi)){(dir[x.ubi.slice(10)]=dir[x.ubi.slice(10)]||[]).push(x);return;} const p=ubiParse(x.ubi); if(p&&p.e&&MAPA_RACKS.includes(p.r)){const k=p.r+'-'+p.e;(slot[k]=slot[k]||[]).push(x);} else otros.push(x);});
+  const blk=x=>`<div class="mp-b mp-${x.consol?'co':mapaEstado(x)}${(x.key===mapaSel||(mapaGrp&&mapaGrp.has(x.key)))?' sel':''}" onclick="mapaPick('${x.key}',event)" title="${x.tip}${x.consol?' · consolidado: '+ctot[x.consol]+' botellas':''}"><b>${x.consol?'🔗 ':''}${ubiEsInsumos(x.ubi)?'⭐ ':''}${x.label}</b><small>${daysDiff(x.dep.fechaIngreso)}d · ${x.bot} bot${x.consol?' · Σ'+ctot[x.consol]:''} · ${mapaTxt(x)}</small></div>`;
   el.innerHTML=MAPA_RACKS.map(r=>`<div class="mp-rack"><div class="mp-rt">Rack ${r} <small style="font-family:'DM Mono',monospace;font-size:.65rem;color:var(--muted)">· ${[1,2,3].reduce((a,e)=>a+(slot[r+'-'+e]||[]).length,0)} pedidos</small></div>`+[3,2,1].map(e=>{
     const ins=e===3, items=slot[r+'-'+e]||[];
     const glow=sel&&!ins&&items.some(x=>x.dep.cliente===sel.dep.cliente&&x.key!==sel.key)?' mp-match':'';
@@ -2081,12 +2118,63 @@ function renderMapa(){
     return `<div class="mp-sh${ins?' mp-ins':''}${glow}" onclick="mapaDrop(${r},${e})"><div class="mp-sl">E${e} · ${lbl}</div><div class="mp-bs">${items.map(blk).join('')}</div></div>`;
   }).join('')+'</div>').join('');
   document.getElementById('mapaOtros').innerHTML=otros.length?otros.map(blk).join(''):'<span style="color:var(--muted);font-size:.8rem">Todo ubicado 🎉</span>';
+  mapaDirectoRender(dir,blk);
   mapaCamiones(sel);
   mapaDia(units);
   mapaHist();
-  document.getElementById('mapaHint').innerHTML=sel?`🖐️ En mano: <b>${sel.tip}</b> (${mapaTxt(sel)}) — tocá un estante para dejarlo o un camión para despacharlo. <span class="mp-x" onclick="mapaSel=null;renderMapa()">soltar</span><br><span style="font-size:.74rem">📅 Despacho programado: <input type="date" value="${sel.fp||''}" onchange="mapaSetFecha('${sel.key}',this.value)" style="border:1px solid var(--border);border-radius:5px;padding:1px 4px;"></span>`:'Tocá una caja o pedido para tomarlo y después un estante para dejarlo.';
+  document.getElementById('mapaHint').innerHTML=mapaHintHtml(sel,units);
 }
-function mapaPick(key,ev){ev.stopPropagation();mapaSel=mapaSel===key?null:key;renderMapa();}
+let mapaGrp=null;
+function mapaHintHtml(sel,units){
+  if(mapaGrp){const mem=units.filter(x=>mapaGrp.has(x.key)), tot=mem.reduce((a,x)=>a+x.bot,0);
+    return `🔗 <b>Consolidando:</b> tocá los pedidos que salen juntos · ${mem.length} elegidos · <b>${tot} botellas</b> <button class="btn btn-sm btn-wine" onclick="mapaConsolOk()">Confirmar</button> <button class="btn btn-sm" onclick="mapaGrp=null;renderMapa()">Cancelar</button>`;}
+  if(!sel) return 'Tocá una caja o pedido para tomarlo y después un estante, un camión o el depósito de un courier.';
+  const mates=sel.consol?units.filter(x=>x.consol===sel.consol):[], tot=mates.reduce((a,x)=>a+x.bot,0);
+  return `🖐️ En mano: <b>${sel.tip}</b> (${mapaTxt(sel)}) — tocá un estante para dejarlo o un camión para despacharlo. <span class="mp-x" onclick="mapaSel=null;renderMapa()">soltar</span> · `
+   +(sel.consol?`<span class="mp-x" onclick="mapaDesagrupar()">✂️ desagrupar (${mates.length} pedidos · ${tot} bot)</span>`:`<span class="mp-x" onclick="mapaConsolIni()">🔗 consolidar con otros</span>`)
+   +`<br><span style="font-size:.74rem">📅 Despacho programado: <input type="date" value="${sel.fp||''}" onchange="mapaSetFecha('${sel.key}',this.value)" style="border:1px solid var(--border);border-radius:5px;padding:1px 4px;"></span>`;
+}
+function mapaDirectoRender(dir,blk){
+  const el=document.getElementById('mapaDirecto'); if(!el) return;
+  const wh='<svg viewBox="0 0 64 56" width="56" height="49" xmlns="http://www.w3.org/2000/svg"><path d="M4 24 L32 6 L60 24 Z" fill="#7A1F3D"/><rect x="8" y="24" width="48" height="26" fill="#E8DFD0" stroke="#7A1F3D" stroke-width="2"/><rect x="22" y="32" width="20" height="18" fill="#7A1F3D"/><path d="M22 38h20M22 44h20" stroke="#E8DFD0" stroke-width="1.5"/></svg>';
+  el.innerHTML=`<div class="mp-dir"><div class="mp-dirh">${wh}<div><b>Directo al courier</b><small>Envíos que no pasan por el depósito: no descuentan insumos. Tomá un pedido y tocá el courier.</small></div></div><div class="mp-dirz">`
+   +['FedEx','DHL','UPS'].map(c=>`<div class="mp-dz" style="border-color:${INS_COL[c].a}" onclick="mapaDirecto('${c}')"><div class="mp-dzh" style="background:${INS_COL[c].h};color:${INS_COL[c].ht}">${c}</div><div class="mp-bs">${(dir[c]||[]).map(blk).join('')}</div></div>`).join('')+'</div></div>';
+}
+async function mapaDirecto(c){
+  const u=mapaUnits().find(x=>x.key===mapaSel);
+  if(!u){mapaBeep(false);showToast('Primero tocá un pedido para pasarlo a "directo al courier"','error');return;}
+  mapaSel=null; const ub='Directo · '+c;
+  try{
+    if(u.idx!==null){u.dep.pedidos[u.idx].transportistaSalida=c;u.dep.pedidos[u.idx].ubicacion=ub;await api({action:'update',target:'deposito',id:u.dep.id,field:'pedidos',value:JSON.stringify(u.dep.pedidos)});}
+    else{await api({action:'update',target:'deposito',id:u.dep.id,field:'ubicacion',value:ub});await api({action:'update',target:'deposito',id:u.dep.id,field:'transporte',value:c});}
+  }catch(e){showToast('Error al guardar','error');return;}
+  mapaBeep(true); showToast('🏭 '+u.label+' → directo a '+c+' (no descuenta insumos)','success'); await loadAll();
+}
+function mapaConsolIni(){if(!mapaSel) return; mapaGrp=new Set([mapaSel]); mapaSel=null; renderMapa();}
+async function mapaSetConsol(mem,id){
+  const deps=new Map();
+  mem.forEach(x=>{if(x.idx!==null) x.dep.pedidos[x.idx].consol=id; else x.dep.shipping=Object.assign({},x.dep.shipping||{},{consol:id}); deps.set(x.dep.id,x.dep);});
+  for(const dep of deps.values()){
+    try{
+      if(mem.some(x=>x.dep===dep&&x.idx!==null)) await api({action:'update',target:'deposito',id:dep.id,field:'pedidos',value:JSON.stringify(dep.pedidos)});
+      if(mem.some(x=>x.dep===dep&&x.idx===null)) await api({action:'update',target:'deposito',id:dep.id,field:'shipping',value:JSON.stringify(dep.shipping)});
+    }catch(e){showToast('Error al guardar','error');}
+  }
+}
+async function mapaConsolOk(){
+  const mem=mapaUnits().filter(x=>mapaGrp&&mapaGrp.has(x.key));
+  if(mem.length<2){mapaBeep(false);showToast('Elegí al menos 2 pedidos','error');return;}
+  if(mem.some(x=>x.dep.cliente!==mem[0].dep.cliente)&&!confirm('Los pedidos son de distintos clientes. ¿Consolidar igual?')) return;
+  const tot=mem.reduce((a,x)=>a+x.bot,0);
+  mapaGrp=null; await mapaSetConsol(mem,'C'+Date.now());
+  mapaBeep(true); showToast('🔗 Consolidados: '+mem.length+' pedidos · '+tot+' botellas juntas','success'); await loadAll();
+}
+async function mapaDesagrupar(){
+  const units=mapaUnits(), u=units.find(x=>x.key===mapaSel); if(!u||!u.consol) return;
+  const mem=units.filter(x=>x.consol===u.consol); mapaSel=null;
+  await mapaSetConsol(mem,''); showToast('✂️ Pedidos desagrupados','success'); await loadAll();
+}
+function mapaPick(key,ev){ev.stopPropagation();if(mapaGrp){if(mapaGrp.has(key)) mapaGrp.delete(key); else mapaGrp.add(key);renderMapa();return;}mapaSel=mapaSel===key?null:key;renderMapa();}
 async function mapaSetUbi(depId,idx,u){
   if(idx===null||idx===undefined){await setField(depId,'ubicacion',u,'deposito');return;}
   const it=DEP.find(i=>i.id===depId); if(!it||!it.pedidos||!it.pedidos[idx]) return;
@@ -3807,7 +3895,7 @@ async function saveShipping(){
   const sh = readShippingInputs();
   try{
     if(shipSubIdx===null){
-      sh.despachoProgramado = (item.shipping||{}).despachoProgramado||sh.despachoProgramado||'';
+      sh.despachoProgramado = (item.shipping||{}).despachoProgramado||sh.despachoProgramado||''; sh.consol = (item.shipping||{}).consol||'';
       item.shipping = sh;
       await api({action:'update', target:'deposito', id:shipDepId, field:'shipping', value:JSON.stringify(sh)});
     } else {
@@ -4042,7 +4130,7 @@ async function confirmSmartPaste(){
       if(pago) await api({action:'update',target:'deposito',id:depId,field:'pago',value:pago});
       if(pagoChanged) await api({action:'update',target:'deposito',id:depId,field:'fechaPago',value:today()});
       if(botellas) await api({action:'update',target:'deposito',id:depId,field:'botellas',value:botellas});
-      sh.despachoProgramado = (item.shipping||{}).despachoProgramado||'';
+      sh.despachoProgramado = (item.shipping||{}).despachoProgramado||''; sh.consol = (item.shipping||{}).consol||'';
       await api({action:'update',target:'deposito',id:depId,field:'shipping',value:JSON.stringify(sh)});
     } else {
       if(!item.pedidos || !item.pedidos[subIdx]) throw new Error('sub no encontrado');
