@@ -653,7 +653,7 @@ function json(obj) { return ContentService.createTextOutput(JSON.stringify(obj))
 
 <!-- INSUMOS -->
 <div id="view-insumos" class="view">
-  <div class="page-header"><div><div class="page-title">Insumos</div><div class="page-sub">Tocá el número para escribir la cantidad exacta · tocá “mín” para definir el stock mínimo</div></div><button class="btn btn-gold" onclick="insNuevo()">+ Ítem</button></div>
+  <div class="page-header"><div><div class="page-title">Insumos</div><div class="page-sub">Tocá el número para escribir la cantidad exacta · tocá “mín” para definir el stock mínimo</div></div><div style="display:flex;gap:6px;flex-wrap:wrap"><button class="btn" onclick="insReglasForm(false)">⚙️ Reglas</button><button class="btn btn-gold" onclick="insNuevo()">+ Ítem</button></div></div>
   <div id="insBody"></div>
 </div>
 
@@ -1701,16 +1701,17 @@ const INS_COL={
 };
 const INS_SEC=[{t:'📦 Insumos por courier',g:['FedEx','DHL','UPS'],lib:false},{t:'📚 Librería y depot',g:['Posca','Librería'],lib:true}];
 
-let REC=[], REC_ERR=false, recEdit=null;
+let REC=[], REC_ERR=false, recEdit=null, REGLAS=null;
 const INS_GRUPOS=['FedEx','DHL','UPS','Posca','Librería'];
 const insEsc=t=>String(t).replace(/&/g,'&amp;').replace(/"/g,'&quot;').replace(/</g,'&lt;');
 const insBad=t=>/['"\\<>]/.test(t);
-function insModal(html){const m=document.createElement('div');m.className='mp-scan';m.id='insMod';m.innerHTML='<div class="mp-sc" style="max-height:90vh;overflow:auto">'+html+'</div>';document.body.appendChild(m);}
+function insModal(html,w){const m=document.createElement('div');m.className='mp-scan';m.id='insMod';m.innerHTML='<div class="mp-sc" style="max-height:90vh;overflow:auto'+(w?';max-width:'+w+'px':'')+'">'+html+'</div>';document.body.appendChild(m);}
 function insModalClose(){const m=document.getElementById('insMod');if(m)m.remove();}
 async function loadRecetas(){
   try{
     const r=await api({action:'get',target:'recetas'}); if(!r.ok) throw 0;
-    REC=(r.data||[]).map(x=>{let c=[];try{c=JSON.parse(x.componentes||'[]');}catch(e){} return {id:String(x.id),nombre:String(x.nombre),grupo:String(x.grupo),comp:c};});
+    REC=[]; REGLAS=null;
+    (r.data||[]).forEach(x=>{if(String(x.id)==='REGLAS'){try{REGLAS=JSON.parse(x.componentes||'null');}catch(e){} return;} let c=[];try{c=JSON.parse(x.componentes||'[]');}catch(e){} REC.push({id:String(x.id),nombre:String(x.nombre),grupo:String(x.grupo),comp:c});});
     REC_ERR=false;
   }catch(e){REC_ERR=true;}
   renderInsumos();
@@ -1743,7 +1744,7 @@ function insPlanHtml(){
   return `<div class="ins-plan"><b>${falta?'⚠️ Con ese plan faltan insumos':'✅ Con ese plan alcanza'}</b><table><tr><th>Insumo</th><th>Necesitás</th><th>Hay</th><th>Quedan</th></tr>${rows}</table></div>`;
 }
 function insRenderArmados(){
-  let h='<div class="qcard" style="margin-bottom:16px"><div class="qcard-title">📦 Cajas que se pueden armar</div>';
+  let h='<div class="qcard" style="margin-bottom:16px"><div class="qcard-title">📦 Cajas que se pueden armar</div><div class="ins-ok" style="margin-bottom:6px">'+(REGLAS&&REGLAS.on?'🔄 Descuento automático al dar salida: <b>activo</b>':'⏸️ Descuento automático al dar salida: <b>apagado</b> (se activa en ⚙️ Reglas)')+'</div>';
   if(REC_ERR) return h+'<div class="ins-ok">Para guardar armados hay que actualizar Code.gs (una vez más) y volver a implementar.</div></div>';
   if(!REC.length) return h+'<div class="ins-ok">Todavía no hay armados cargados. Tocá “+ Armado” y definí qué lleva cada caja.</div><button class="btn btn-sm btn-gold" style="margin-top:8px" onclick="recForm(null)">+ Armado</button></div>';
   const uso={}; REC.forEach(r=>r.comp.forEach(c=>{if(!insEsOpc(c)) (uso[c.id]=uso[c.id]||new Set()).add(r.id);}));
@@ -1794,6 +1795,76 @@ async function recBorrar(){
   if(!confirm('¿Borrar el armado "'+recEdit.nombre+'"?')) return;
   try{await api({action:'delete',target:'recetas',id:recEdit.id});}catch(e){showToast('Error al borrar','error');return;}
   insModalClose(); loadRecetas();
+}
+
+// ── Descuento automático de insumos al dar salida ──
+function insCarrier(t){return ['FedEx','DHL','UPS'].find(c=>c.toLowerCase()===String(t||'').trim().toLowerCase())||'';}
+function insCajas(n){const o={}; const k=Math.floor(n/6); if(k) o[6]=k; const r=n-k*6; if(r>0){const sz=r===5?6:r; o[sz]=(o[sz]||0)+1;} return o;}
+function insReglasDef(){
+  const x=(g,n)=>{const r=REC.find(r=>r.grupo===g&&new RegExp('x\\s*'+n+'\\b','i').test(r.nombre)&&!/mag|aceite|eco/i.test(r.nombre));return r?r.id:'';};
+  const eco=REC.find(r=>r.grupo==='FedEx'&&/eco/i.test(r.nombre));
+  return {on:true,r:{
+    1:{FedEx:x('DHL',1),DHL:x('DHL',1),UPS:x('DHL',1)},
+    2:{FedEx:x('FedEx',2),DHL:x('DHL',2),UPS:x('UPS',2)},
+    3:{FedEx:x('DHL',3),DHL:x('DHL',3),UPS:x('DHL',3)},
+    4:{FedEx:x('FedEx',4),DHL:x('FedEx',4),UPS:x('UPS',4)},
+    6:{FedEx:eco?eco.id:x('FedEx',6),DHL:x('DHL',6),UPS:x('UPS',6)}}};
+}
+function insDescPrepara(item,idx){
+  const res={delta:{},txt:[],avisos:[],flagged:false};
+  try{
+    if(!REGLAS||!REGLAS.on||!INS.length||!REC.length) return res;
+    const hasP=item.pedidos&&item.pedidos.length;
+    const units=(idx!==null&&idx!==undefined&&hasP&&item.pedidos[idx])?[item.pedidos[idx]]:(hasP?item.pedidos.filter(p=>!p.salida):[item]);
+    units.forEach(u=>{
+      const isP=u!==item;
+      if(u.stockDesc) return;
+      if(String((isP&&u.subtipo)||item.subtipo||'vino').toLowerCase()!=='vino') return;
+      const bot=parseInt(u.botellas,10); if(!(bot>0)) return;
+      const c=insCarrier(isP?(u.transportistaSalida||item.transporte):item.transporte);
+      if(!c){res.avisos.push((item.cliente||'Pedido')+': falta el courier de salida (FedEx, DHL o UPS)'); return;}
+      const antes=res.txt.length;
+      Object.entries(insCajas(bot)).forEach(([sz,n])=>{
+        const rec=REC.find(r=>r.id===((REGLAS.r||{})[sz]||{})[c]);
+        if(!rec){res.avisos.push('Sin armado definido para caja x'+sz+' por '+c);return;}
+        rec.comp.forEach(k=>{const x=INS.find(i=>i.id===k.id); if(x&&/^ventanas?$/i.test(String(x.item).trim())) return; res.delta[k.id]=(res.delta[k.id]||0)+k.q*n;});
+        res.delta[c+'|Ventanas']=(res.delta[c+'|Ventanas']||0)+n;
+        res.txt.push(n+'× '+rec.nombre+' '+rec.grupo);
+      });
+      if(isP&&res.txt.length>antes){u.stockDesc=true;res.flagged=true;}
+    });
+  }catch(e){}
+  return res;
+}
+async function insDescAplica(res){
+  try{
+    if(!res) return;
+    const ids=Object.keys(res.delta);
+    if(!ids.length){ if(res.avisos.length) setTimeout(()=>showToast('⚠️ '+res.avisos[0]+' · no se descontó stock','error'),1500); return; }
+    const falt=[];
+    for(const id of ids){const x=INS.find(i=>i.id===id); if(!x) continue; if(x.stock<res.delta[id]) falt.push(x.item+' · '+x.grupo); x.stock=Math.max(0,x.stock-res.delta[id]); await insPut(id,'stock',x.stock);}
+    renderInsumos();
+    setTimeout(()=>showToast(falt.length?'⚠️ Faltaba stock de '+falt.join(', ')+' (quedó en 0)':'🧰 Insumos descontados: '+res.txt.join(' + '),falt.length?'error':'success'),1500);
+  }catch(e){}
+}
+function insReglasForm(def){
+  const R=def?insReglasDef():(REGLAS&&REGLAS.r?REGLAS:insReglasDef());
+  const opts=sel=>'<option value="">— sin descuento —</option>'+REC.map(r=>`<option value="${r.id}" ${r.id===sel?'selected':''}>${insEsc(r.nombre)} · ${r.grupo}</option>`).join('');
+  const filas=[[1,'1 botella'],[2,'2 botellas'],[3,'3 botellas'],[4,'4 botellas'],[6,'5 o 6 botellas']];
+  insModal(`<b>⚙️ Reglas de descuento de insumos</b><div style="font-size:.76rem;color:var(--muted);line-height:1.4">Según las botellas del envío y el <b>courier por el que sale</b>, cada fila indica qué armado se usa. Con más de 6 botellas se arman cajas de 6 y el resto va en la caja que corresponda (ej: 15 = 2 × x6 + 1 × x3). Además, cada caja descuenta una <b>ventana del courier que la lleva</b>. Solo aplica a vino.</div>`
+   +`<label style="font-size:.82rem"><input type="checkbox" id="rg-on" ${R.on!==false?'checked':''} style="flex:none;width:auto;padding:0"> Descontar automáticamente al dar salida</label>`
+   +`<div style="overflow-x:auto"><table style="width:100%;border-collapse:collapse;font-size:.74rem"><tr><th></th>${['FedEx','DHL','UPS'].map(c=>`<th style="padding:4px;text-align:left">sale por ${c}</th>`).join('')}</tr>`
+   +filas.map(([sz,l])=>`<tr><td style="padding:4px;white-space:nowrap"><b>${l}</b></td>${['FedEx','DHL','UPS'].map(c=>`<td style="padding:3px"><select id="rg-${sz}-${c}" style="width:100%;font-size:.7rem;padding:3px;border-radius:6px">${opts(((R.r||{})[sz]||{})[c])}</select></td>`).join('')}</tr>`).join('')
+   +`</table></div><div style="display:flex;gap:6px;flex-wrap:wrap"><button class="btn btn-wine btn-sm" onclick="insReglasGuardar()">Guardar</button><button class="btn btn-sm" onclick="insReglasForm(true)">↺ Sugeridas</button><button class="btn btn-sm" onclick="insModalClose()">Cancelar</button></div>`,680);
+}
+async function insReglasGuardar(){
+  const r={}; [1,2,3,4,6].forEach(sz=>{r[sz]={};['FedEx','DHL','UPS'].forEach(c=>{r[sz][c]=document.getElementById('rg-'+sz+'-'+c).value;});});
+  const val=JSON.stringify({on:document.getElementById('rg-on').checked,r:r});
+  try{
+    if(REGLAS){await api({action:'update',target:'recetas',id:'REGLAS',field:'componentes',value:val});}
+    else{const rr=await api({action:'add',target:'recetas',row:JSON.stringify({id:'REGLAS',nombre:'__reglas__',grupo:'',componentes:val})}); if(!rr.ok) throw 0;}
+  }catch(e){showToast('Error al guardar las reglas','error');return;}
+  insModalClose(); showToast('Reglas guardadas ✅','success'); loadRecetas();
 }
 function insNuevo(){
   const cats=[...new Set(INS.map(x=>x.cat))];
@@ -2357,10 +2428,12 @@ function renderPrioridad(){
 async function registrarSalidaSub(depId, pedIdx){
   const item = DEP.find(i=>i.id===depId);
   if(!item||!item.pedidos) return;
+  const dsc = insDescPrepara(item,pedIdx);
   item.pedidos[pedIdx].salida = true;
   item.pedidos[pedIdx].fechaSalida = today();
   try{
     await api({action:'update',target:'deposito',id:depId,field:'pedidos',value:JSON.stringify(item.pedidos)});
+    await insDescAplica(dsc);
     // Check if ALL subpedidos have salida → mark main as retirado
     const allOut = item.pedidos.every(p=>p.salida);
     if(allOut){
@@ -2653,15 +2726,19 @@ async function saveDeposito(){
 async function registrarSalida(id){
   const item = DEP.find(i=>i.id===id);
   try{
+    const dsc = item ? insDescPrepara(item,null) : null;
     // If has exactly 1 subpedido, mark it as salida too
     if(item && item.pedidos && item.pedidos.length === 1){
       item.pedidos[0].salida = true;
       item.pedidos[0].fechaSalida = today();
       await api({action:'update',target:'deposito',id,field:'pedidos',value:JSON.stringify(item.pedidos)});
+    } else if(dsc && dsc.flagged){
+      await api({action:'update',target:'deposito',id,field:'pedidos',value:JSON.stringify(item.pedidos)});
     }
     // Mark main record as retirado
     await api({action:'update',target:'deposito',id,field:'retirado',value:'TRUE'});
     await api({action:'update',target:'deposito',id,field:'fechaSalida',value:today()});
+    await insDescAplica(dsc);
     showToast('📦 Salida registrada','success');
     await loadAll();
   }
