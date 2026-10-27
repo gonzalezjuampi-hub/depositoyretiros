@@ -1850,7 +1850,7 @@ function insDescPrepara(item,idx){
       const bot=parseInt(u.botellas,10); if(!(bot>0)) return;
       const c=insCarrier(isP?(u.transportistaSalida||item.transporte):item.transporte);
       const ub=isP?(u.ubicacion||item.ubicacion):item.ubicacion; if(/^Directo/.test(ub||'')) return;
-      const con=isP?u.consol:(item.shipping&&item.shipping.consol); if(con){res.avisos.push((item.cliente||'Pedido')+' está consolidado: despachalo desde las camionetas del mapa para sumar las botellas'); return;}
+      const con=isP?u.consol:(item.shipping&&item.shipping.consol); if(con&&mapaUnits().filter(x=>x.consol===con).length>1){res.avisos.push((item.cliente||'Pedido')+' está consolidado: despachalo desde las camionetas del mapa para sumar las botellas'); return;}
       if(!c){res.avisos.push((item.cliente||'Pedido')+': falta el courier de salida (FedEx, DHL o UPS)'); return;}
       const antes=res.txt.length;
       insCajasAplica(res,bot,c);
@@ -2000,6 +2000,7 @@ function mapaUnits(){
     if(peds.length) peds.forEach((p,k)=>{ if(p.salida) return; u.push({key:i.id+':'+k,dep:i,idx:k,ped:p,ubi:p.ubicacion||i.ubicacion||'',pago:p.pago,fp:p.despachoProgramado||'',bot:parseInt(p.botellas,10)||0,consol:p.consol||'',label:(i.cliente||'?').slice(0,8)+' P'+(k+1),tip:(i.cliente||'')+' · Pedido '+(k+1)+(p.destinatario?' · '+p.destinatario:'')}); });
     else u.push({key:i.id,dep:i,idx:null,ped:null,ubi:i.ubicacion||'',pago:i.pago,fp:(i.shipping&&i.shipping.despachoProgramado)||'',bot:parseInt(i.botellas,10)||0,consol:(i.shipping&&i.shipping.consol)||'',label:(i.cliente||'?').slice(0,10),tip:(i.cliente||'')+' · '+(i.negocio||'')});
   });
+  const cnt={}; u.forEach(x=>{if(x.consol) cnt[x.consol]=(cnt[x.consol]||0)+1;}); u.forEach(x=>{if(x.consol&&cnt[x.consol]<2) x.consol='';});
   return u;
 }
 function mapaEstado(u){
@@ -2149,6 +2150,32 @@ async function mapaDirecto(c){
     else{await api({action:'update',target:'deposito',id:u.dep.id,field:'ubicacion',value:ub});await api({action:'update',target:'deposito',id:u.dep.id,field:'transporte',value:c});}
   }catch(e){showToast('Error al guardar','error');return;}
   mapaBeep(true); showToast('🏭 '+u.label+' → directo a '+c+' (no descuenta insumos)','success'); await loadAll();
+}
+function stockConsolTot(depId){
+  const it=DEP.find(i=>i.id===depId); if(!it) return;
+  const sel=[...document.querySelectorAll('.scG:checked')].map(c=>+c.value);
+  const tot=sel.reduce((a,k)=>a+(parseInt(it.pedidos[k].botellas,10)||0),0);
+  const el=document.getElementById('scTot'); if(el) el.innerHTML=sel.length?'Elegidos: <b>'+sel.length+'</b> pedidos · <b>'+tot+' botellas</b> → '+Object.entries(insCajas(tot)).map(([z,n])=>n+'× caja x'+z).join(' + '):'Ningún pedido elegido';
+}
+function stockConsolForm(depId){
+  const it=DEP.find(i=>i.id===depId); if(!it||!it.pedidos) return;
+  const rows=it.pedidos.map((p,k)=>({p:p,k:k})).filter(x=>!x.p.salida);
+  insModal(`<b>🔗 Consolidar pedidos de ${insEsc(it.cliente)}</b><div style="font-size:.76rem;color:var(--muted);line-height:1.4">Marcá los pedidos que salen juntos en la misma caja. Se suman las botellas para calcular las cajas y se despachan todos a la vez desde las camionetas del mapa. Para desagrupar, destildalos.</div>`
+   +rows.map(({p,k})=>`<label style="display:flex;gap:8px;align-items:center;font-size:.82rem"><input type="checkbox" class="scG" value="${k}" ${p.consol?'checked':''} onchange="stockConsolTot('${depId}')" style="flex:none;width:auto;padding:0"><span>Pedido ${k+1}${p.destinatario?' · '+insEsc(p.destinatario):''} · <b>${parseInt(p.botellas,10)||0} bot</b> · ${isPagoPaid(p.pago)?'pagado':'a cobrar'}${p.consol?' · 🔗':''}</span></label>`).join('')
+   +`<div id="scTot" style="font-size:.8rem"></div><div style="display:flex;gap:6px;flex-wrap:wrap"><button class="btn btn-wine btn-sm" onclick="stockConsolOk('${depId}')">Guardar</button><button class="btn btn-sm" onclick="insModalClose()">Cancelar</button></div>`);
+  stockConsolTot(depId);
+}
+async function stockConsolOk(depId){
+  const it=DEP.find(i=>i.id===depId); if(!it) return;
+  const all=it.pedidos.map((p,k)=>k).filter(k=>!it.pedidos[k].salida);
+  const sel=[...document.querySelectorAll('.scG:checked')].map(c=>+c.value);
+  if(sel.length===1){showToast('Elegí al menos 2 pedidos (o ninguno para desagrupar)','error');return;}
+  const olds=new Set(sel.map(k=>it.pedidos[k].consol).filter(Boolean));
+  const common=olds.size===1&&sel.every(k=>it.pedidos[k].consol)?[...olds][0]:'';
+  const id=sel.length?(common||'C'+Date.now()):'';
+  all.forEach(k=>{if(sel.includes(k)) it.pedidos[k].consol=id; else if(!sel.length||olds.has(it.pedidos[k].consol)) it.pedidos[k].consol='';});
+  try{await api({action:'update',target:'deposito',id:depId,field:'pedidos',value:JSON.stringify(it.pedidos)});}catch(e){showToast('Error al guardar','error');return;}
+  insModalClose(); showToast(sel.length?'🔗 Pedidos consolidados':'✂️ Pedidos desagrupados','success'); await loadAll();
 }
 function mapaConsolIni(){if(!mapaSel) return; mapaGrp=new Set([mapaSel]); mapaSel=null; renderMapa();}
 async function mapaSetConsol(mem,id){
@@ -2329,6 +2356,7 @@ function renderStock(){
       <td onclick="event.stopPropagation()"><div style="display:flex;gap:5px;">
         <button class="btn btn-sm" style="background:#EEF3FF;color:#1E4D8C;" onclick="openEditDepModal('${i.id}')">✏️</button>
         <button class="btn btn-sm" style="background:#E8F5EC;color:var(--green);" onclick="openAddPedidoModal('${i.id}')">+📦</button>
+        ${pedCount>=2?`<button class="btn btn-sm" style="background:#FFF1DC;color:#B26A00;" onclick="stockConsolForm('${i.id}')" title="Consolidar pedidos (salen juntos en la misma caja)">🔗</button>`:''}
         <button class="btn btn-sm" style="background:#FFF4E0;color:#8A4F00;" onclick="event.stopPropagation();openEtiquetaModal('${i.id}')" title="Generar etiqueta QR">🏷️</button>
         ${mainPaid?shipIconHtml(i.id,null,mainShip):''}
         <button class="btn btn-green btn-sm" onclick="registrarSalida('${i.id}')">✅</button>
@@ -2347,6 +2375,7 @@ function renderStock(){
           <button class="add-pedido-btn" onclick="openAddPedidoModal('${i.id}')">
             ＋ Agregar pedido / envío
           </button>
+          ${pedCount>=2?`<button class="add-pedido-btn" style="margin-left:6px;" onclick="stockConsolForm('${i.id}')">🔗 Consolidar pedidos</button>`:''}
         </div>
       </td>
     </tr>`;
@@ -2360,7 +2389,7 @@ function pedidoCard(depId, ped, idx){
   const subPaid = isPagoPaid(ped.pago);
   const subShip = subPaid ? (ped.shipping||{}) : null;
   return `<div class="pedido-item">
-    <div class="pedidos-panel-title" style="margin-bottom:8px;">Pedido ${idx+1}${ped.destinatario?' · '+ped.destinatario:''}${subPaid?alertaShipping(subShip):''}</div>
+    <div class="pedidos-panel-title" style="margin-bottom:8px;">Pedido ${idx+1}${ped.destinatario?' · '+ped.destinatario:''}${ped.consol?' <span style="background:#FFF1DC;color:#B26A00;border-radius:20px;padding:1px 8px;font-size:.68rem;">🔗 consolidado</span>':''}${subPaid?alertaShipping(subShip):''}</div>
     <div class="pedido-grid">
       <div class="pedido-field">
         <span class="pedido-label">Destinatario</span>
