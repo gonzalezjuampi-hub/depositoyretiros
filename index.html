@@ -2151,31 +2151,47 @@ async function mapaDirecto(c){
   }catch(e){showToast('Error al guardar','error');return;}
   mapaBeep(true); showToast('🏭 '+u.label+' → directo a '+c+' (no descuenta insumos)','success'); await loadAll();
 }
-function stockConsolTot(depId){
-  const it=DEP.find(i=>i.id===depId); if(!it) return;
-  const sel=[...document.querySelectorAll('.scG:checked')].map(c=>+c.value);
-  const tot=sel.reduce((a,k)=>a+(parseInt(it.pedidos[k].botellas,10)||0),0);
-  const el=document.getElementById('scTot'); if(el) el.innerHTML=sel.length?'Elegidos: <b>'+sel.length+'</b> pedidos · <b>'+tot+' botellas</b> → '+Object.entries(insCajas(tot)).map(([z,n])=>n+'× caja x'+z).join(' + '):'Ningún pedido elegido';
+let scSel=new Set(), scDep='';
+function stockConsolTot(){
+  const us=mapaUnits().filter(x=>scSel.has(x.key)), tot=us.reduce((a,x)=>a+x.bot,0);
+  const el=document.getElementById('scTot'); if(!el) return;
+  el.innerHTML=us.length?'Elegidos: <b>'+us.length+'</b> pedidos · <b>'+tot+' botellas</b>'+(tot?' → '+Object.entries(insCajas(tot)).map(([z,n])=>n+'× caja x'+z).join(' + '):''):'Ningún pedido elegido';
+}
+function scToggle(key,on){if(on) scSel.add(key); else scSel.delete(key); stockConsolTot();}
+function scLine(x,mine){
+  return `<label style="display:flex;gap:8px;align-items:center;font-size:.8rem"><input type="checkbox" ${scSel.has(x.key)?'checked':''} onchange="scToggle('${x.key}',this.checked)" style="flex:none;width:auto;padding:0"><span>${mine?'':'<b>'+insEsc(x.dep.cliente)+'</b> · '}${x.idx!==null?'Pedido '+(x.idx+1):'Envío'}${x.ped&&x.ped.destinatario?' · '+insEsc(x.ped.destinatario):''} · <b>${x.bot} bot</b> · ${isPagoPaid(x.pago)?'pagado':'a cobrar'}</span></label>`;
+}
+function scBuscar(){
+  const q=((document.getElementById('scQ')||{}).value||'').trim().toLowerCase();
+  const otros=mapaUnits().filter(x=>x.dep.id!==scDep&&(scSel.has(x.key)||(q&&((x.dep.cliente||'').toLowerCase().includes(q)||String((x.ped&&x.ped.destinatario)||'').toLowerCase().includes(q)))));
+  const el=document.getElementById('scRes'); if(!el) return;
+  el.innerHTML=otros.slice(0,25).map(x=>scLine(x,false)).join('')||'<div style="font-size:.74rem;color:var(--muted)">Escribí un cliente o destinatario para buscar pedidos de otros envíos</div>';
 }
 function stockConsolForm(depId){
-  const it=DEP.find(i=>i.id===depId); if(!it||!it.pedidos) return;
-  const rows=it.pedidos.map((p,k)=>({p:p,k:k})).filter(x=>!x.p.salida);
-  insModal(`<b>🔗 Consolidar pedidos de ${insEsc(it.cliente)}</b><div style="font-size:.76rem;color:var(--muted);line-height:1.4">Marcá los pedidos que salen juntos en la misma caja. Se suman las botellas para calcular las cajas y se despachan todos a la vez desde las camionetas del mapa. Para desagrupar, destildalos.</div>`
-   +rows.map(({p,k})=>`<label style="display:flex;gap:8px;align-items:center;font-size:.82rem"><input type="checkbox" class="scG" value="${k}" ${p.consol?'checked':''} onchange="stockConsolTot('${depId}')" style="flex:none;width:auto;padding:0"><span>Pedido ${k+1}${p.destinatario?' · '+insEsc(p.destinatario):''} · <b>${parseInt(p.botellas,10)||0} bot</b> · ${isPagoPaid(p.pago)?'pagado':'a cobrar'}${p.consol?' · 🔗':''}</span></label>`).join('')
-   +`<div id="scTot" style="font-size:.8rem"></div><div style="display:flex;gap:6px;flex-wrap:wrap"><button class="btn btn-wine btn-sm" onclick="stockConsolOk('${depId}')">Guardar</button><button class="btn btn-sm" onclick="insModalClose()">Cancelar</button></div>`);
-  stockConsolTot(depId);
+  const us=mapaUnits(), mine=us.filter(x=>x.dep.id===depId), it=DEP.find(i=>i.id===depId);
+  scDep=depId; scSel=new Set();
+  const cs=new Set(mine.map(x=>x.consol).filter(Boolean));
+  us.forEach(x=>{if(x.consol&&cs.has(x.consol)) scSel.add(x.key);});
+  insModal(`<b>🔗 Consolidar pedidos</b><div style="font-size:.76rem;color:var(--muted);line-height:1.4">Marcá los pedidos que salen juntos en la misma caja, <b>aunque sean de distintos clientes o envíos</b>. Se suman las botellas para calcular las cajas y se despachan todos a la vez desde las camionetas del mapa. Para desagrupar, destildalos.</div>`
+   +`<div style="font-size:.76rem;font-weight:700">De ${insEsc(it?it.cliente:'')}</div>`
+   +(mine.map(x=>scLine(x,true)).join('')||'<div style="font-size:.74rem;color:var(--muted)">No tiene pedidos pendientes</div>')
+   +`<div style="font-size:.76rem;font-weight:700;margin-top:4px">Sumar pedidos de otros clientes o envíos</div><input id="scQ" placeholder="Buscar cliente o destinatario…" oninput="scBuscar()"><div id="scRes"></div><div id="scTot" style="font-size:.8rem"></div>`
+   +`<div style="display:flex;gap:6px;flex-wrap:wrap"><button class="btn btn-wine btn-sm" onclick="stockConsolOk()">Guardar</button><button class="btn btn-sm" onclick="insModalClose()">Cancelar</button></div>`,520);
+  scBuscar(); stockConsolTot();
 }
-async function stockConsolOk(depId){
-  const it=DEP.find(i=>i.id===depId); if(!it) return;
-  const all=it.pedidos.map((p,k)=>k).filter(k=>!it.pedidos[k].salida);
-  const sel=[...document.querySelectorAll('.scG:checked')].map(c=>+c.value);
-  if(sel.length===1){showToast('Elegí al menos 2 pedidos (o ninguno para desagrupar)','error');return;}
-  const olds=new Set(sel.map(k=>it.pedidos[k].consol).filter(Boolean));
-  const common=olds.size===1&&sel.every(k=>it.pedidos[k].consol)?[...olds][0]:'';
-  const id=sel.length?(common||'C'+Date.now()):'';
-  all.forEach(k=>{if(sel.includes(k)) it.pedidos[k].consol=id; else if(!sel.length||olds.has(it.pedidos[k].consol)) it.pedidos[k].consol='';});
-  try{await api({action:'update',target:'deposito',id:depId,field:'pedidos',value:JSON.stringify(it.pedidos)});}catch(e){showToast('Error al guardar','error');return;}
-  insModalClose(); showToast(sel.length?'🔗 Pedidos consolidados':'✂️ Pedidos desagrupados','success'); await loadAll();
+async function stockConsolOk(){
+  const us=mapaUnits(), S=us.filter(x=>scSel.has(x.key));
+  if(S.length===1){showToast('Elegí al menos 2 pedidos (o ninguno para desagrupar)','error');return;}
+  const mine=us.filter(x=>x.dep.id===scDep);
+  const olds=new Set(S.concat(mine).map(x=>x.consol).filter(Boolean));
+  const fuera=us.filter(x=>!scSel.has(x.key)&&x.consol&&olds.has(x.consol));
+  const common=S.length&&S.every(x=>x.consol)&&new Set(S.map(x=>x.consol)).size===1?S[0].consol:'';
+  const tot=S.reduce((a,x)=>a+x.bot,0);
+  try{
+    if(fuera.length) await mapaSetConsol(fuera,'');
+    if(S.length) await mapaSetConsol(S,common||'C'+Date.now());
+  }catch(e){showToast('Error al guardar','error');return;}
+  insModalClose(); showToast(S.length?'🔗 Consolidados: '+S.length+' pedidos · '+tot+' botellas juntas':'✂️ Pedidos desagrupados','success'); await loadAll();
 }
 function mapaConsolIni(){if(!mapaSel) return; mapaGrp=new Set([mapaSel]); mapaSel=null; renderMapa();}
 async function mapaSetConsol(mem,id){
@@ -2191,7 +2207,6 @@ async function mapaSetConsol(mem,id){
 async function mapaConsolOk(){
   const mem=mapaUnits().filter(x=>mapaGrp&&mapaGrp.has(x.key));
   if(mem.length<2){mapaBeep(false);showToast('Elegí al menos 2 pedidos','error');return;}
-  if(mem.some(x=>x.dep.cliente!==mem[0].dep.cliente)&&!confirm('Los pedidos son de distintos clientes. ¿Consolidar igual?')) return;
   const tot=mem.reduce((a,x)=>a+x.bot,0);
   mapaGrp=null; await mapaSetConsol(mem,'C'+Date.now());
   mapaBeep(true); showToast('🔗 Consolidados: '+mem.length+' pedidos · '+tot+' botellas juntas','success'); await loadAll();
@@ -2356,7 +2371,7 @@ function renderStock(){
       <td onclick="event.stopPropagation()"><div style="display:flex;gap:5px;">
         <button class="btn btn-sm" style="background:#EEF3FF;color:#1E4D8C;" onclick="openEditDepModal('${i.id}')">✏️</button>
         <button class="btn btn-sm" style="background:#E8F5EC;color:var(--green);" onclick="openAddPedidoModal('${i.id}')">+📦</button>
-        ${pedCount>=2?`<button class="btn btn-sm" style="background:#FFF1DC;color:#B26A00;" onclick="stockConsolForm('${i.id}')" title="Consolidar pedidos (salen juntos en la misma caja)">🔗</button>`:''}
+        <button class="btn btn-sm" style="background:#FFF1DC;color:#B26A00;" onclick="stockConsolForm('${i.id}')" title="Consolidar con otros pedidos (incluso de otros clientes)">🔗</button>
         <button class="btn btn-sm" style="background:#FFF4E0;color:#8A4F00;" onclick="event.stopPropagation();openEtiquetaModal('${i.id}')" title="Generar etiqueta QR">🏷️</button>
         ${mainPaid?shipIconHtml(i.id,null,mainShip):''}
         <button class="btn btn-green btn-sm" onclick="registrarSalida('${i.id}')">✅</button>
@@ -2375,7 +2390,7 @@ function renderStock(){
           <button class="add-pedido-btn" onclick="openAddPedidoModal('${i.id}')">
             ＋ Agregar pedido / envío
           </button>
-          ${pedCount>=2?`<button class="add-pedido-btn" style="margin-left:6px;" onclick="stockConsolForm('${i.id}')">🔗 Consolidar pedidos</button>`:''}
+          <button class="add-pedido-btn" style="margin-left:6px;" onclick="stockConsolForm('${i.id}')">🔗 Consolidar con otros pedidos</button>
         </div>
       </td>
     </tr>`;
