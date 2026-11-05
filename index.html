@@ -609,6 +609,7 @@ function json(obj) { return ContentService.createTextOutput(JSON.stringify(obj))
     <div class="nav-item" onclick="showView('deposito',this)"><span class="nav-icon">📦</span>Stock<span class="nav-badge" id="badgeStock">0</span></div>
     <div class="nav-item" onclick="showView('mapa',this)"><span class="nav-icon">🗺️</span>Mapa</div>
     <div class="nav-item" onclick="showView('insumos',this)"><span class="nav-icon">🧰</span>Insumos<span class="nav-badge" id="badgeIns">0</span></div>
+    <div class="nav-item" onclick="showView('importadores',this)"><span class="nav-icon">📑</span>Importadores</div>
     <div class="nav-item" onclick="showView('prioridad',this)"><span class="nav-icon">🚨</span>Cola Prioridad<span class="nav-badge" id="badgePrio">0</span></div>
     <div class="nav-item" onclick="showView('egreso',this)"><span class="nav-icon">✅</span>Registrar Salida</div>
     <div class="nav-item" onclick="showView('historial',this)"><span class="nav-icon">📋</span>Historial</div>
@@ -656,6 +657,13 @@ function json(obj) { return ContentService.createTextOutput(JSON.stringify(obj))
       <div class="today-list" id="depPrioList"></div>
     </div>
   </div>
+</div>
+
+<!-- IMPORTADORES -->
+<div id="view-importadores" class="view">
+  <div class="page-header"><div><div class="page-title">Importadores</div><div class="page-sub">Envíos a USA (vino y muestras) por importador, según la fecha de salida</div></div>
+    <div style="display:flex;gap:6px;flex-wrap:wrap;align-items:center"><input type="month" id="impMesIn" onchange="impMes=this.value;renderImportadores()" style="border:1.5px solid var(--border);border-radius:8px;padding:6px 8px"><button class="btn btn-gold" onclick="impExcel()">⬇️ Excel</button></div></div>
+  <div id="impBody"></div>
 </div>
 
 <!-- INSUMOS -->
@@ -808,7 +816,7 @@ function json(obj) { return ContentService.createTextOutput(JSON.stringify(obj))
       </div>
       <div class="field-row">
         <div class="field"><label>Subtipo</label>
-          <select id="d-subtipo"><option value="vino">Vino</option><option value="documento">Documentación / Muestra</option></select>
+          <select id="d-subtipo"><option value="vino">Vino</option><option value="muestra">Muestra</option><option value="documento">Documentación</option></select>
         </div>
         <div class="field"><label>Transporte</label>
           <select id="d-transporte"><option value="TLI">TLI</option><option value="FuliExpress">FuliExpress</option><option value="Maximus">Maximus</option><option value="DHL">DHL</option><option value="FedEx">FedEx</option><option value="Otro">Otro</option></select>
@@ -960,7 +968,8 @@ function json(obj) { return ContentService.createTextOutput(JSON.stringify(obj))
         <div class="field"><label>Subtipo</label>
           <select id="ed-subtipo">
             <option value="vino">Vino</option>
-            <option value="documento">Documentación / Muestra</option>
+            <option value="muestra">Muestra</option>
+            <option value="documento">Documentación</option>
           </select>
         </div>
       </div>
@@ -997,6 +1006,12 @@ function json(obj) { return ContentService.createTextOutput(JSON.stringify(obj))
         <div class="field"><label>Destino / País</label>
           <input id="ed-destino" placeholder="ej. USA, España…">
         </div>
+      </div>
+      <div class="field-row" id="ed-imp-row">
+        <div class="field"><label>Importador (si va a USA)</label>
+          <select id="ed-imp" onchange="document.getElementById('ed-awb').style.display=this.value==='Wine & Beyond'?'':'none'"><option value="">— elegir —</option><option>Finca La Malena</option><option>Wine & Beyond</option><option>Propio</option><option>No Aplica</option></select>
+        </div>
+        <div class="field"><label># AWB FedEx (Wine & Beyond)</label><input id="ed-awb" placeholder="# AWB"></div>
       </div>
       <div class="field-row">
         <div class="field"><label>Fecha de ingreso</label>
@@ -1556,7 +1571,7 @@ function getRescheduledDate(ret){
 // ═══════════════════════════════════════
 function calcPriority(item){
   const paid=['cash','paypal','zelle','cc30'].includes(item.pago);
-  const isComex=item.negocio==='Comex', isDoc=item.subtipo==='documento';
+  const isComex=item.negocio==='Comex', isDoc=item.subtipo==='documento'||item.subtipo==='muestra';
   if(isComex&&isDoc&&paid) return 1;
   if(isComex&&paid)        return 2;
   if(!isComex&&paid)       return 3;
@@ -1690,12 +1705,128 @@ function getAlertClass(item){
   return (dDep || dPago) ? 'alerta-row' : '';
 }
 
-function renderAll(){ renderMapa(); renderDashboard(); renderStock(); renderPrioridad(); renderEgreso(); renderHistorial(); renderRetHoy(); renderRetTodos(); renderClientes(); updateBadges(); }
+function renderAll(){ renderMapa(); renderImportadores(); renderDashboard(); renderStock(); renderPrioridad(); renderEgreso(); renderHistorial(); renderRetHoy(); renderRetTodos(); renderClientes(); updateBadges(); }
 
 
 // ═══════════════════════════════════════
 //  MAPA DEL DEPÓSITO
 // ═══════════════════════════════════════
+// ═══════════════════════════════════════
+//  IMPORTADORES (envíos a USA)
+// ═══════════════════════════════════════
+const IMPS=['Finca La Malena','Wine & Beyond','Propio','No Aplica'];
+let impMes='';
+function esUSA(t){
+  const n=String(t||'').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'').replace(/[^a-z]/g,'');
+  return n==='us'||n==='eua'||/^(usa|eeuu)/.test(n)||/(usa|eeuu)$/.test(n)||n.includes('estadosunidos')||n.includes('unitedstates');
+}
+function impAplica(dep,idx){
+  const p=(idx!==null&&idx!==undefined&&dep.pedidos)?dep.pedidos[idx]:null;
+  const st=String((p&&p.subtipo)||dep.subtipo||'vino').toLowerCase();
+  if(st!=='vino'&&st!=='muestra') return false;
+  return esUSA((p&&p.destino)||dep.destino||(p&&p.shipping&&p.shipping.pais)||(dep.shipping&&dep.shipping.pais)||'');
+}
+function impDatos(dep,idx){const o=(idx!==null&&idx!==undefined&&dep.pedidos)?dep.pedidos[idx]:(dep.shipping||{}); return {imp:(o&&o.importador)||'',awb:(o&&o.awb)||''};}
+function impSet(dep,idx,imp,awb){
+  if(idx!==null&&idx!==undefined&&dep.pedidos){dep.pedidos[idx].importador=imp;dep.pedidos[idx].awb=awb;}
+  else dep.shipping=Object.assign({},dep.shipping||{},{importador:imp,awb:awb});
+}
+function impFalta(dep,idx){if(!impAplica(dep,idx)) return false; const d=impDatos(dep,idx); return !d.imp||(d.imp==='Wine & Beyond'&&!d.awb);}
+async function impPersist(items){
+  const deps=new Map(); items.forEach(x=>{const e=deps.get(x.dep.id)||{dep:x.dep,sub:false,item:false}; if(x.idx!==null&&x.idx!==undefined) e.sub=true; else e.item=true; deps.set(x.dep.id,e);});
+  for(const e of deps.values()){
+    if(e.sub) await api({action:'update',target:'deposito',id:e.dep.id,field:'pedidos',value:JSON.stringify(e.dep.pedidos)});
+    if(e.item) await api({action:'update',target:'deposito',id:e.dep.id,field:'shipping',value:JSON.stringify(e.dep.shipping||{})});
+  }
+}
+let _impItems=[], _impRes=null;
+function impPedir(items){
+  return new Promise(res=>{
+    _impItems=items; _impRes=res;
+    insModal(`<b>📑 Importador del envío</b><div style="font-size:.78rem;color:var(--muted);line-height:1.4">Envío a USA: elegí el importador${items.length>1?' (se aplica a los '+items.length+' pedidos)':''}.<br>${items.map(x=>insEsc(x.dep.cliente)+(x.idx!==null&&x.idx!==undefined?' · P'+(x.idx+1):'')).join(' · ')}</div>`
+     +IMPS.map(o=>`<label style="display:flex;gap:8px;align-items:center;font-size:.86rem"><input type="radio" name="impR" value="${o}" onchange="document.getElementById('impAwbBox').style.display=this.value==='Wine & Beyond'?'':'none'" style="flex:none;width:auto;padding:0"> ${o}</label>`).join('')
+     +`<div id="impAwbBox" style="display:none"><input id="impAwb" placeholder="# AWB FedEx utilizada"></div><div id="impErr" style="color:var(--red);font-size:.76rem"></div>`
+     +`<div style="display:flex;gap:6px;flex-wrap:wrap"><button class="btn btn-wine btn-sm" onclick="impOk()">Guardar y seguir</button><button class="btn btn-sm" onclick="impCancel()">Cancelar</button></div>`);
+  });
+}
+async function impOk(){
+  const r=document.querySelector('input[name=impR]:checked'), err=document.getElementById('impErr');
+  if(!r){err.textContent='Elegí una opción.';return;}
+  const awb=r.value==='Wine & Beyond'?document.getElementById('impAwb').value.trim():'';
+  if(r.value==='Wine & Beyond'&&!awb){err.textContent='Para Wine & Beyond hace falta el # de AWB FedEx.';return;}
+  _impItems.forEach(x=>impSet(x.dep,x.idx,r.value,awb));
+  try{await impPersist(_impItems);}catch(e){showToast('Error al guardar el importador','error');insModalClose();_impRes(false);return;}
+  insModalClose(); _impRes(true);
+}
+function impCancel(){insModalClose(); if(_impRes) _impRes(false);}
+async function impAsegurar(dep,idxs){
+  const falt=idxs.filter(k=>impFalta(dep,k)).map(k=>({dep:dep,idx:k}));
+  return falt.length?await impPedir(falt):true;
+}
+async function impEditar(depId,idx,field,value){
+  const dep=DEP.find(i=>i.id===depId); if(!dep) return; const k=idx<0?null:idx;
+  const o=k===null?(dep.shipping=Object.assign({},dep.shipping||{})):dep.pedidos[k];
+  o[field]=value; if(field==='importador'&&value!=='Wine & Beyond') o.awb='';
+  try{await api({action:'update',target:'deposito',id:depId,field:k===null?'shipping':'pedidos',value:JSON.stringify(k===null?dep.shipping:dep.pedidos)});showToast('Guardado ✅','success');}catch(e){showToast('Error al guardar','error');}
+  renderImportadores();
+}
+async function impTipo(depId,val){
+  const dep=DEP.find(i=>i.id===depId); if(!dep) return;
+  try{
+    if(val==='muestra') await api({action:'update',target:'deposito',id:depId,field:'subtipo',value:'muestra'});
+    else await api({action:'update',target:'deposito',id:depId,field:'shipping',value:JSON.stringify(Object.assign({},dep.shipping||{},{tipoOk:'1'}))});
+    showToast('Guardado ✅','success'); await loadAll();
+  }catch(e){showToast('Error al guardar','error');}
+}
+function impFilas(){
+  const out=[], f10=x=>String(x||'').slice(0,10);
+  DEP.forEach(i=>{
+    const ps=i.pedidos||[];
+    const add=(p,k)=>{
+      const fecha=k!==null?(p.salida?f10(p.fechaSalida||i.fechaSalida):''):(i.retirado?f10(i.fechaSalida):'');
+      if(!fecha) return;
+      const d=impDatos(i,k); if(!impAplica(i,k)&&!d.imp) return;
+      out.push({dep:i,idx:k,fecha:fecha,cliente:i.cliente||'',dest:k!==null?(p.destinatario||''):'',bot:parseInt(k!==null?p.botellas:i.botellas,10)||0,courier:(k!==null?p.transportistaSalida:'')||i.transporte||'',tipo:String((k!==null&&p.subtipo)||i.subtipo||'vino'),imp:d.imp,awb:d.awb,destino:(k!==null&&p.destino)||i.destino||''});
+    };
+    if(ps.length) ps.forEach((p,k)=>add(p,k)); else add(null,null);
+  });
+  return out.filter(r=>r.fecha.slice(0,7)===impMes).sort((a,b)=>a.fecha<b.fecha?-1:a.fecha>b.fecha?1:0);
+}
+function impRevisar(){
+  return DEP.filter(i=>{
+    if(i.subtipo!=='documento'||(i.shipping&&i.shipping.tipoOk)) return false;
+    const ps=i.pedidos||[];
+    if(!(esUSA(i.destino)||esUSA(i.shipping&&i.shipping.pais)||ps.some(p=>esUSA(p.destino)||esUSA(p.shipping&&p.shipping.pais)))) return false;
+    return !i.retirado||String(i.fechaSalida||'').slice(0,7)===impMes;
+  });
+}
+function renderImportadores(){
+  const box=document.getElementById('impBody'); if(!box) return;
+  if(!impMes) impMes=today().slice(0,7);
+  const inp=document.getElementById('impMesIn'); if(inp) inp.value=impMes;
+  const rows=impFilas(), grupos=IMPS.concat(['Sin importador']), g={};
+  grupos.forEach(k=>g[k]={n:0,b:0}); rows.forEach(r=>{const k=r.imp||'Sin importador'; g[k].n++; g[k].b+=r.bot;});
+  let h='<div class="qcard" style="margin-bottom:16px"><div class="qcard-title">📊 Resumen del mes</div><div class="mp-chips">'
+   +grupos.map(k=>`<span style="${k==='Sin importador'&&g[k].n?'background:#FFECEC;border-color:#E57373;':''}">${k}: <b>${g[k].n}</b> envíos · ${g[k].b} bot</span>`).join('')+'</div></div>';
+  h+='<div class="qcard" style="margin-bottom:16px"><div class="qcard-title">📋 Envíos del mes ('+rows.length+')</div>'
+   +(rows.length?'<div style="overflow-x:auto"><table class="ins-t"><tr>'+['Salida','Cliente','Destinatario','Tipo','Bot.','Courier','Importador','AWB FedEx'].map(t=>`<th style="background:var(--wine-dk);color:#fff">${t}</th>`).join('')+'</tr>'
+   +rows.map(r=>{const k=r.idx===null?-1:r.idx;return `<tr style="${r.imp?'':'background:#FFECEC;'}"><td>${r.fecha}</td><td style="text-align:left">${insEsc(r.cliente)}${r.idx!==null?' · P'+(r.idx+1):''}</td><td style="text-align:left">${insEsc(r.dest)}</td><td>${r.tipo==='muestra'?'Muestra':'Vino'}</td><td>${r.bot}</td><td>${insEsc(r.courier)}</td><td><select onchange="impEditar('${r.dep.id}',${k},'importador',this.value)">${['',...IMPS].map(o=>`<option value="${o}" ${o===r.imp?'selected':''}>${o||'— elegir —'}</option>`).join('')}</select></td><td>${r.imp==='Wine & Beyond'?`<input value="${insEsc(r.awb)}" placeholder="# AWB" style="width:130px" onchange="impEditar('${r.dep.id}',${k},'awb',this.value.trim())">`:''}</td></tr>`;}).join('')
+   +'</table></div>':'<div class="ins-ok">No hay envíos a USA (vino o muestra) con salida en este mes.</div>')+'</div>';
+  const rev=impRevisar();
+  if(rev.length) h+='<div class="qcard"><div class="qcard-title">🧪 Revisar tipo (Documentación → Muestra) ('+rev.length+')</div><div class="ins-ok" style="margin-bottom:6px">Antes “Documentación / Muestra” era una sola opción. Estos envíos a USA figuran como Documentación: indicá cuáles en realidad son muestras (esas piden importador).</div>'
+   +rev.map(i=>`<div class="ins-li"><span><b>${insEsc(i.cliente)}</b> → ${insEsc(i.destino||'USA')} · ${i.retirado?'salió '+String(i.fechaSalida).slice(0,10):'en depósito'}</span><span><button class="btn btn-sm btn-wine" onclick="impTipo('${i.id}','muestra')">Es muestra</button> <button class="btn btn-sm" onclick="impTipo('${i.id}','ok')">Es documentación</button></span></div>`).join('')+'</div>';
+  box.innerHTML=h;
+}
+function impExcel(){
+  const rows=impFilas(), esc=t=>String(t==null?'':t).replace(/&/g,'&amp;').replace(/</g,'&lt;');
+  const grupos=IMPS.concat(['Sin importador']);
+  let h='<html><head><meta charset="utf-8"></head><body><table border="1"><tr><th colspan="8">Envíos a USA por importador — '+impMes+'</th></tr>';
+  grupos.forEach(k=>{const rr=rows.filter(r=>(r.imp||'Sin importador')===k); h+='<tr><td colspan="3"><b>'+k+'</b></td><td colspan="5">'+rr.length+' envíos · '+rr.reduce((a,r)=>a+r.bot,0)+' botellas</td></tr>';});
+  h+='<tr></tr><tr><th>Importador</th><th>Salida</th><th>Cliente</th><th>Destinatario</th><th>Tipo</th><th>Botellas</th><th>Courier</th><th>AWB FedEx</th></tr>';
+  grupos.forEach(k=>rows.filter(r=>(r.imp||'Sin importador')===k).forEach(r=>{h+='<tr><td>'+k+'</td><td>'+r.fecha+'</td><td>'+esc(r.cliente)+(r.idx!==null?' · P'+(r.idx+1):'')+'</td><td>'+esc(r.dest)+'</td><td>'+(r.tipo==='muestra'?'Muestra':'Vino')+'</td><td>'+r.bot+'</td><td>'+esc(r.courier)+'</td><td>'+esc(r.awb)+'</td></tr>';}));
+  h+='</table></body></html>';
+  const a=document.createElement('a'); a.href=URL.createObjectURL(new Blob(['\ufeff'+h],{type:'application/vnd.ms-excel;charset=utf-8'})); a.download='Importadores_'+impMes+'.xls'; a.click(); setTimeout(()=>URL.revokeObjectURL(a.href),2000);
+}
 // ═══════════════════════════════════════
 //  INSUMOS
 // ═══════════════════════════════════════
@@ -2044,6 +2175,8 @@ async function mapaTruck(n){
   if(fu) msg+='\n\n📅 Tiene despacho programado para el '+fu.fp.slice(8,10)+'/'+fu.fp.slice(5,7)+'.';
   if(prev&&prev!==n) msg+='\n\nTenía asignado '+prev+'; se va a cambiar a '+n+'.';
   if(!confirm(msg)) return;
+  const faltI=grp.filter(m=>impFalta(m.dep,m.idx)).map(m=>({dep:m.dep,idx:m.idx}));
+  if(faltI.length&&!(await impPedir(faltI))) return;
   mapaSel=null;
   const tk=document.getElementById('mpt-'+n); if(tk){tk.classList.add('go');setTimeout(()=>tk.classList.remove('go'),1600);}
   mapaBeep(true);
@@ -2195,6 +2328,7 @@ async function stockConsolOk(){
 }
 function mapaConsolIni(){if(!mapaSel) return; mapaGrp=new Set([mapaSel]); mapaSel=null; renderMapa();}
 async function mapaSetConsol(mem,id){
+  if(id){const src=mem.map(x=>impDatos(x.dep,x.idx)).find(d=>d.imp); if(src) mem.forEach(x=>{if(impAplica(x.dep,x.idx)&&!impDatos(x.dep,x.idx).imp) impSet(x.dep,x.idx,src.imp,src.awb);});}
   const deps=new Map();
   mem.forEach(x=>{if(x.idx!==null) x.dep.pedidos[x.idx].consol=id; else x.dep.shipping=Object.assign({},x.dep.shipping||{},{consol:id}); deps.set(x.dep.id,x.dep);});
   for(const dep of deps.values()){
@@ -2450,6 +2584,11 @@ function pedidoCard(depId, ped, idx){
         <span class="pedido-label">Despacho programado</span>
         <input type="date" value="${ped.despachoProgramado||''}" onchange="updatePedido('${depId}',${idx},'despachoProgramado',this.value)">
       </div>
+      ${impAplica(DEP.find(i=>i.id===depId)||{},idx)?`<div class="pedido-field">
+        <span class="pedido-label">Importador (USA)</span>
+        <select onchange="updatePedido('${depId}',${idx},'importador',this.value);document.getElementById('awb_${depId}_${idx}').style.display=this.value==='Wine & Beyond'?'':'none'">${['',...IMPS].map(o=>`<option value="${o}" ${o===(ped.importador||'')?'selected':''}>${o||'— elegir —'}</option>`).join('')}</select>
+        <input id="awb_${depId}_${idx}" placeholder="# AWB FedEx" value="${insEsc(ped.awb||'')}" style="${ped.importador==='Wine & Beyond'?'':'display:none;'}margin-top:4px" onchange="updatePedido('${depId}',${idx},'awb',this.value.trim())">
+      </div>`:''}
     </div>
     <div class="pedido-actions">
       <span style="font-size:.72rem;color:var(--muted);flex:1;">Notas: <input value="${ped.notas||''}" placeholder="observaciones…" style="border:1px solid var(--border);border-radius:5px;padding:2px 6px;font-size:.75rem;width:180px;" onchange="updatePedido('${depId}',${idx},'notas',this.value)"></span>
@@ -2479,7 +2618,7 @@ function calcSubPriority(sub, parentItem){
   if(!paid) return 99; // not in queue
   const negocio = sub.negocio || parentItem.negocio || '';
   const isComex = negocio === 'Comex';
-  const isDoc = (sub.subtipo||'') === 'documento';
+  const isDoc = ['documento','muestra'].includes(sub.subtipo||parentItem.subtipo||'');
   if(isComex && isDoc) return 1;
   if(isComex) return 2;
   return 3;
@@ -2560,6 +2699,7 @@ function renderPrioridad(){
 async function registrarSalidaSub(depId, pedIdx){
   const item = DEP.find(i=>i.id===depId);
   if(!item||!item.pedidos) return;
+  if(!(await impAsegurar(item,[pedIdx]))) return;
   const dsc = insDescPrepara(item,pedIdx);
   item.pedidos[pedIdx].salida = true;
   item.pedidos[pedIdx].fechaSalida = today();
@@ -2857,6 +2997,7 @@ async function saveDeposito(){
 }
 async function registrarSalida(id){
   const item = DEP.find(i=>i.id===id);
+  if(item){const ks=(item.pedidos&&item.pedidos.length)?item.pedidos.map((p,k)=>k).filter(k=>!item.pedidos[k].salida):[null]; if(!(await impAsegurar(item,ks))) return;}
   try{
     const dsc = item ? insDescPrepara(item,null) : null;
     // If has exactly 1 subpedido, mark it as salida too
@@ -3077,6 +3218,7 @@ function openEditDepModal(id){
   document.getElementById('ed-fecha').value       = item.fechaIngreso||today();
   document.getElementById('ed-notas').value       = item.notas||'';
   fillUbiSelect(item.ubicacion||'');
+  { const sh=item.shipping||{}; document.getElementById('ed-imp').value=sh.importador||''; document.getElementById('ed-awb').value=sh.awb||''; document.getElementById('ed-awb').style.display=sh.importador==='Wine & Beyond'?'':'none'; document.getElementById('ed-imp-row').style.display=(item.pedidos&&item.pedidos.length)?'none':''; }
   document.getElementById('ed-transporte-salida').value = '';
   document.getElementById('editDepModalOverlay').classList.add('open');
 }
@@ -3110,6 +3252,11 @@ async function saveEditDep(){
     // Save each changed field
     for(const [field, value] of Object.entries(fields)){
       await api({action:'update', target:'deposito', id:editingDepId, field, value});
+    }
+    if(itemEdit && !(itemEdit.pedidos&&itemEdit.pedidos.length)){
+      const imp=document.getElementById('ed-imp').value, awb=imp==='Wine & Beyond'?document.getElementById('ed-awb').value.trim():'';
+      const sh=Object.assign({},itemEdit.shipping||{},{importador:imp,awb:awb});
+      await api({action:'update', target:'deposito', id:editingDepId, field:'shipping', value:JSON.stringify(sh)});
     }
     closeEditDepModal();
     showToast('✅ Registro actualizado','success');
@@ -3558,7 +3705,7 @@ function generarIngresos(){
       if(i.destino) msg += ' → '+i.destino;
       msg += NL;
       msg += '   '+i.transporte+(i.botellas&&i.botellas!=='—'?' · '+i.botellas+' bot.':'')+' · '+pago_label;
-      if(i.subtipo==='documento') msg += ' · 📋 Doc/Muestra';
+      if(i.subtipo==='documento') msg += ' · 📋 Documentación'; else if(i.subtipo==='muestra') msg += ' · 🧪 Muestra';
       msg += NL;
       // Subpedidos full detail
       if(i.pedidos && i.pedidos.length>0){
@@ -3939,7 +4086,7 @@ async function saveShipping(){
   const sh = readShippingInputs();
   try{
     if(shipSubIdx===null){
-      sh.despachoProgramado = (item.shipping||{}).despachoProgramado||sh.despachoProgramado||''; sh.consol = (item.shipping||{}).consol||'';
+      sh.despachoProgramado = (item.shipping||{}).despachoProgramado||sh.despachoProgramado||''; sh.consol = (item.shipping||{}).consol||''; sh.importador = (item.shipping||{}).importador||''; sh.awb = (item.shipping||{}).awb||''; sh.tipoOk = (item.shipping||{}).tipoOk||'';
       item.shipping = sh;
       await api({action:'update', target:'deposito', id:shipDepId, field:'shipping', value:JSON.stringify(sh)});
     } else {
@@ -4174,7 +4321,7 @@ async function confirmSmartPaste(){
       if(pago) await api({action:'update',target:'deposito',id:depId,field:'pago',value:pago});
       if(pagoChanged) await api({action:'update',target:'deposito',id:depId,field:'fechaPago',value:today()});
       if(botellas) await api({action:'update',target:'deposito',id:depId,field:'botellas',value:botellas});
-      sh.despachoProgramado = (item.shipping||{}).despachoProgramado||''; sh.consol = (item.shipping||{}).consol||'';
+      sh.despachoProgramado = (item.shipping||{}).despachoProgramado||''; sh.consol = (item.shipping||{}).consol||''; sh.importador = (item.shipping||{}).importador||''; sh.awb = (item.shipping||{}).awb||''; sh.tipoOk = (item.shipping||{}).tipoOk||'';
       await api({action:'update',target:'deposito',id:depId,field:'shipping',value:JSON.stringify(sh)});
     } else {
       if(!item.pedidos || !item.pedidos[subIdx]) throw new Error('sub no encontrado');
