@@ -1256,6 +1256,10 @@ function json(obj) { return ContentService.createTextOutput(JSON.stringify(obj))
         <div class="field"><label>Transportista</label><select id="rep-transp" style="border:1.5px solid var(--border);border-radius:8px;padding:7px 10px;font-size:.83rem;font-family:'DM Sans',sans-serif;background:var(--cream);outline:none;"><option value="todos">Todos</option><option value="TLI">TLI</option><option value="Mailex">Mailex</option><option value="FuliExpress">FuliExpress</option></select></div>
         <button class="btn btn-wine" onclick="generarReporte()">Generar</button>
       </div>
+      <div style="display:flex;flex-direction:column;gap:6px;margin:-4px 0 14px;font-size:.8rem;">
+        <label style="display:flex;gap:8px;align-items:center;cursor:pointer;"><input type="checkbox" id="rep-reprog" checked> 🔁 Incluir <b>reprogramados</b> (pendientes de retirar de días anteriores)</label>
+        <label style="display:flex;gap:8px;align-items:center;cursor:pointer;flex-wrap:wrap;"><input type="checkbox" id="rep-ingr" checked> 📥 Incluir <b>retirados pendientes de ingreso</b> al depósito, de los últimos <input id="rep-dias" type="number" min="1" max="60" value="10" style="width:56px;border:1.5px solid var(--border);border-radius:6px;padding:2px 6px;"> días</label>
+      </div>
       <div id="repResultado" style="display:none;">
         <div style="display:flex;justify-content:space-between;margin-bottom:8px;"><span style="font-size:.75rem;color:var(--muted);">Vista previa</span><button class="btn btn-gold btn-sm" onclick="copiarReporte()">Copiar para WhatsApp</button></div>
         <div class="reporte-box" id="repTexto"></div>
@@ -1279,8 +1283,9 @@ function json(obj) { return ContentService.createTextOutput(JSON.stringify(obj))
       </div>
       <div class="field full">
         <label>Motivo de la falla *</label>
-        <select id="fallidoMotivo" style="border:1.5px solid var(--border);border-radius:8px;padding:8px 11px;font-size:.85rem;font-family:'DM Sans',sans-serif;color:var(--ink);background:var(--cream);outline:none;">
+        <select id="fallidoMotivo" onchange="fallidoSel()" style="border:1.5px solid var(--border);border-radius:8px;padding:8px 11px;font-size:.85rem;font-family:'DM Sans',sans-serif;color:var(--ink);background:var(--cream);outline:none;">
           <option value="">— seleccionar motivo —</option>
+          <option value="Reprograma para día siguiente">🔁 Reprograma para día siguiente (se suma a los retiros)</option>
           <option value="Muestras no estaban listas">Muestras no estaban listas</option>
           <option value="Cliente no estaba presente">Cliente no estaba presente</option>
           <option value="Documentación incompleta">Documentación incompleta</option>
@@ -1289,6 +1294,7 @@ function json(obj) { return ContentService.createTextOutput(JSON.stringify(obj))
           <option value="Problema de acceso al lugar">Problema de acceso al lugar</option>
           <option value="Otro">Otro (ver notas)</option>
         </select>
+        <div id="fallidoHint" style="display:none;margin-top:8px;font-size:.78rem;background:#E8F5EC;color:#1B5E3A;border-radius:8px;padding:7px 10px;"></div>
       </div>
     </div>
     <div class="modal-footer">
@@ -2834,7 +2840,8 @@ function renderRetHoyFallidos(){
       <td><span style="color:var(--muted);font-size:.75rem;">—</span></td>
       <td>—</td>
       <td style="font-size:.75rem;color:var(--muted);max-width:120px;">${r.notas||'—'}</td>
-      <td><button class="btn btn-sm" style="background:#fff;color:#9B2335;border:1px solid #9B2335;font-size:.72rem;" onclick="reintentarRetiro('${r.id}')">🔄 Reintentar</button>
+      <td><button class="btn btn-sm" style="background:#E8F5EC;color:#1B5E3A;border:1px solid #1B5E3A;font-size:.72rem;" onclick="reprogramarRetiro('${r.id}')" title="Lo pasa al próximo día de retiro de su zona y lo suma a los retiros">🔁 Reprogramar</button>
+      <button class="btn btn-sm" style="background:#fff;color:#9B2335;border:1px solid #9B2335;font-size:.72rem;" onclick="reintentarRetiro('${r.id}')">🔄 Reintentar</button>
       <button class="btn btn-sm" style="background:var(--cream);" onclick="deleteRet('${r.id}')">🗑</button></td>
     </tr>`;
   }).join('');
@@ -3386,37 +3393,64 @@ function generarReporte(){
   var fecha=document.getElementById('rep-fecha').value;
   var transp=document.getElementById('rep-transp').value;
   if(!fecha){showToast('Selecciona una fecha','error');return;}
-  var ret=RET.filter(function(r){return String(r.fechaRetiro).slice(0,10)===fecha&&!r.retirado;});
-  if(transp!=='todos') ret=ret.filter(function(r){return r.transportistaRetiro===transp;});
+  var incRep=document.getElementById('rep-reprog').checked, incIng=document.getElementById('rep-ingr').checked;
+  var dias=parseInt(document.getElementById('rep-dias').value,10); if(isNaN(dias)||dias<1) dias=10;
+  var f10=function(x){return String(x||'').slice(0,10);};
+  var dm=function(x){var f=f10(x);return f.slice(8,10)+'/'+f.slice(5,7);};
+  var okT=function(r){return transp==='todos'||r.transportistaRetiro===transp;};
   var zo={'Gran Mendoza':1,'Valle de Uco':2,'Zona Este':3};
-  ret.sort(function(a,b){var z=(zo[a.zona]||9)-(zo[b.zona]||9);return z||a.cliente.localeCompare(b.cliente);});
-  if(!ret.length){document.getElementById('repResultado').style.display='none';document.getElementById('repVacio').style.display='block';return;}
+  var srt=function(a,b){var z=(zo[a.zona]||9)-(zo[b.zona]||9);return z||a.cliente.localeCompare(b.cliente);};
+  var ret=RET.filter(function(r){return f10(r.fechaRetiro)===fecha&&!r.retirado&&okT(r);}).sort(srt);
+  var dow=new Date(fecha+'T12:00:00').getDay();
+  var reprog=incRep?RET.filter(function(r){
+    var rf=f10(r.fechaRetiro);
+    return rf<fecha&&!r.retirado&&!r.retiroFallido&&okT(r)&&(ZONE_DAYS[r.zona]||[]).indexOf(dow)>=0;
+  }).sort(function(a,b){var x=f10(a.fechaRetiro),y=f10(b.fechaRetiro);return x<y?-1:x>y?1:srt(a,b);}):[];
+  var d0=new Date(fecha+'T12:00:00'); d0.setDate(d0.getDate()-dias); var minF=d0.toISOString().slice(0,10);
+  var pendIng=incIng?RET.filter(function(r){
+    var rf=f10(r.fechaRetiro);
+    return r.retirado&&!r.ingresado&&!r.retiroFallido&&rf<fecha&&rf>=minF&&okT(r);
+  }).sort(function(a,b){var x=f10(a.fechaRetiro),y=f10(b.fechaRetiro);return x<y?-1:x>y?1:srt(a,b);}):[];
+  var total=ret.length+reprog.length+pendIng.length;
+  if(!total){document.getElementById('repResultado').style.display='none';document.getElementById('repVacio').style.display='block';return;}
   var fo=new Date(fecha+'T12:00:00');
   var dn=['domingo','lunes','martes','miercoles','jueves','viernes','sabado'];
   var mn=['enero','febrero','marzo','abril','mayo','junio','julio','agosto','septiembre','octubre','noviembre','diciembre'];
   var ds=dn[fo.getDay()]+' '+fo.getDate()+' de '+mn[fo.getMonth()];
   var NL='\n';
+  var num=1;
+  var linea=function(r,extra){
+    var t=num+'. '+r.cliente+(r.negocio?' ('+r.negocio+')':'')+(extra?' - '+extra:'')+NL;
+    if(r.notas&&r.notas.trim()) t+='   Nota: '+r.notas.trim()+NL;
+    if(r.subpedidos&&r.subpedidos.length>0){
+      r.subpedidos.forEach(function(s){
+        if(s.cliente&&s.cliente.trim()) t+='   - '+s.cliente+(s.botellas?' '+s.botellas+' bot.':'')+(s.negocio?' ('+s.negocio+')':'')+NL;
+      });
+    }
+    num++; return t;
+  };
   var msg='Buenas tardes, les paso los retiros del '+ds+':'+NL+NL;
   var zones=['Gran Mendoza','Valle de Uco','Zona Este'];
   var ze={'Gran Mendoza':'🏙','Valle de Uco':'🍇','Zona Este':'🌄'};
-  var num=1;
   zones.forEach(function(zona){
     var g=ret.filter(function(r){return r.zona===zona;});
     if(!g.length) return;
     msg+=ze[zona]+' '+zona.toUpperCase()+NL;
-    g.forEach(function(r){
-      msg+=num+'. '+r.cliente+(r.negocio?' ('+r.negocio+')':'')+NL;
-      if(r.notas&&r.notas.trim()) msg+='   Nota: '+r.notas.trim()+NL;
-      if(r.subpedidos&&r.subpedidos.length>0){
-        r.subpedidos.forEach(function(s){
-          if(s.cliente&&s.cliente.trim()) msg+='   - '+s.cliente+(s.botellas?' '+s.botellas+' bot.':'')+(s.negocio?' ('+s.negocio+')':'')+NL;
-        });
-      }
-      num++;
-    });
+    g.forEach(function(r){msg+=linea(r,'');});
     msg+=NL;
   });
-  msg+='Total: '+ret.length+' retiro'+(ret.length>1?'s':'')+NL+'Ante cualquier consulta comunicarse con AWS GROUP.';
+  if(reprog.length){
+    msg+='🔁 REPROGRAMADOS (quedaron pendientes de retirar)'+NL;
+    reprog.forEach(function(r){msg+=linea(r,(r.zona||'')+' · pedido del '+dm(r.fechaRetiro));});
+    msg+=NL;
+  }
+  if(pendIng.length){
+    msg+='📥 RETIRADOS PENDIENTES DE INGRESO AL DEPÓSITO'+NL;
+    pendIng.forEach(function(r){msg+=linea(r,(r.zona||'')+' · retirado el '+dm(r.fechaRetiro));});
+    msg+=NL;
+  }
+  var det=[]; if(ret.length) det.push(ret.length+' del día'); if(reprog.length) det.push(reprog.length+' reprogramado'+(reprog.length>1?'s':'')); if(pendIng.length) det.push(pendIng.length+' pendiente'+(pendIng.length>1?'s':'')+' de ingreso');
+  msg+='Total: '+total+' retiro'+(total>1?'s':'')+(det.length>1?' ('+det.join(' + ')+')':'')+NL+'Ante cualquier consulta comunicarse con AWS GROUP.';
   document.getElementById('repTexto').textContent=msg;
   document.getElementById('repResultado').style.display='block';
   document.getElementById('repVacio').style.display='none';
@@ -3433,7 +3467,7 @@ document.getElementById('reporteModalOverlay').addEventListener('click',function
 //  RETIRO FALLIDO
 // ═══════════════════════════════════════
 function fallidoBtn(r){
-  const opts=['Sin falla','Muestras no estaban listas','Cliente no estaba presente','Documentacion incompleta','Direccion incorrecta','Cancelado por el cliente','Problema de acceso','Otro'];
+  const opts=['Sin falla','Reprograma para día siguiente','Muestras no estaban listas','Cliente no estaba presente','Documentacion incompleta','Direccion incorrecta','Cancelado por el cliente','Problema de acceso','Otro'];
   const cur = r.retiroFallido ? (r.motivoFalla||'') : '';
   const st = r.retiroFallido ? 'border:1.5px solid #FDE8EC;background:#FDE8EC;color:#9B2335;' : 'border:1.5px solid var(--border);background:var(--cream);color:var(--muted);';
   return `<select class="mono" style="${st}border-radius:6px;padding:3px 6px;font-size:.72rem;outline:none;max-width:130px;"
@@ -3444,6 +3478,7 @@ function fallidoBtn(r){
 
 async function setFallido(id, val){
   if(!val || val==='Sin falla') return;
+  if(val==='Reprograma para día siguiente'){ await reprogramarRetiro(id); return; }
   try{
     await api({action:'update',target:'retiros',id:id,field:'retiroFallido',value:'TRUE'});
     await api({action:'update',target:'retiros',id:id,field:'motivoFalla',value:val});
@@ -3452,10 +3487,45 @@ async function setFallido(id, val){
   }catch(e){ showToast('Error al guardar','error'); }
 }
 
+async function reprogramarRetiro(id){
+  const r = RET.find(x=>x.id===id); if(!r) return;
+  const nf = proxDiaRetiro(r), ant = String(r.fechaRetiro||'').slice(0,10);
+  if(!confirm('¿Reprogramar el retiro de '+r.cliente+' para el '+fmtDiaLargo(nf)+(r.zona?' (próximo día de '+r.zona+')':'')+'?')){ renderRetHoy(); return; }
+  const nota = (r.notas&&r.notas.trim()?r.notas.trim()+' | ':'')+'🔁 Reprogramado desde el '+ant.slice(8,10)+'/'+ant.slice(5,7);
+  try{
+    await api({action:'update',target:'retiros',id:id,field:'fechaRetiro',value:nf});
+    await api({action:'update',target:'retiros',id:id,field:'notas',value:nota});
+    if(r.retiroFallido){
+      await api({action:'update',target:'retiros',id:id,field:'retiroFallido',value:'FALSE'});
+      await api({action:'update',target:'retiros',id:id,field:'motivoFalla',value:''});
+    }
+    showToast('🔁 Reprogramado para el '+fmtDiaLargo(nf),'success');
+    await loadAll();
+  }catch(e){ showToast('Error al guardar','error'); }
+}
+
 let fallidoRetId = null;
+var FALLIDO_REPROG='Reprograma para día siguiente';
+function proxDiaRetiro(r){
+  var base=String(r.fechaRetiro||'').slice(0,10), hoy=today(); if(!base||base<hoy) base=hoy;
+  var days=ZONE_DAYS[r.zona]||[], d=new Date(base+'T12:00:00');
+  for(var i=0;i<14;i++){ d.setDate(d.getDate()+1); if(!days.length||days.indexOf(d.getDay())>=0) return d.toISOString().slice(0,10); }
+  d=new Date(base+'T12:00:00'); d.setDate(d.getDate()+1); return d.toISOString().slice(0,10);
+}
+function fmtDiaLargo(f){
+  var dn=['domingo','lunes','martes','miércoles','jueves','viernes','sábado'], d=new Date(f+'T12:00:00');
+  return dn[d.getDay()]+' '+f.slice(8,10)+'/'+f.slice(5,7);
+}
+function fallidoSel(){
+  var v=document.getElementById('fallidoMotivo').value, r=RET.find(function(x){return x.id===fallidoRetId;});
+  var hint=document.getElementById('fallidoHint'), btn=document.getElementById('fallidoSaveBtn'), rp=v===FALLIDO_REPROG;
+  if(hint){ hint.style.display=(rp&&r)?'block':'none'; if(rp&&r) hint.textContent='🔁 El retiro vuelve a la lista con fecha '+fmtDiaLargo(proxDiaRetiro(r))+(r.zona?' (próximo día de retiro de '+r.zona+')':'')+'. No queda como fallido.'; }
+  if(btn) btn.textContent=rp?'🔁 Reprogramar':'Confirmar falla';
+}
 function abrirFallido(id){
   fallidoRetId = id;
   document.getElementById('fallidoMotivo').value='';
+  fallidoSel();
   document.getElementById('fallidoOverlay').classList.add('open');
 }
 function cerrarFallido(){ document.getElementById('fallidoOverlay').classList.remove('open'); fallidoRetId=null; }
@@ -3465,15 +3535,27 @@ async function guardarFallido(){
   if(!motivo){ showToast('Seleccioná el motivo de la falla','error'); return; }
   if(!fallidoRetId){ showToast('Error: no se identificó el retiro','error'); return; }
   const btn = document.getElementById('fallidoSaveBtn');
+  const rp = motivo===FALLIDO_REPROG;
   btn.disabled=true; btn.innerHTML='<span class="spinner"></span>Guardando…';
   try{
-    await api({action:'update',target:'retiros',id:fallidoRetId,field:'retiroFallido',value:'TRUE'});
-    await api({action:'update',target:'retiros',id:fallidoRetId,field:'motivoFalla',value:motivo});
-    cerrarFallido();
-    showToast('❌ Retiro marcado como fallido','error');
+    if(rp){
+      const r = RET.find(x=>x.id===fallidoRetId);
+      if(!r) throw new Error('retiro no encontrado');
+      const nf = proxDiaRetiro(r), ant = String(r.fechaRetiro||'').slice(0,10);
+      const nota = (r.notas&&r.notas.trim()?r.notas.trim()+' | ':'')+'🔁 Reprogramado desde el '+ant.slice(8,10)+'/'+ant.slice(5,7);
+      await api({action:'update',target:'retiros',id:fallidoRetId,field:'fechaRetiro',value:nf});
+      await api({action:'update',target:'retiros',id:fallidoRetId,field:'notas',value:nota});
+      cerrarFallido();
+      showToast('🔁 Reprogramado para el '+fmtDiaLargo(nf),'success');
+    } else {
+      await api({action:'update',target:'retiros',id:fallidoRetId,field:'retiroFallido',value:'TRUE'});
+      await api({action:'update',target:'retiros',id:fallidoRetId,field:'motivoFalla',value:motivo});
+      cerrarFallido();
+      showToast('❌ Retiro marcado como fallido','error');
+    }
     await loadAll();
   }catch(e){ showToast('Error al guardar','error'); }
-  btn.disabled=false; btn.innerHTML='Confirmar';
+  btn.disabled=false; btn.textContent='Confirmar falla';
 }
 
 document.getElementById('fallidoOverlay').addEventListener('click',function(e){if(e.target===e.currentTarget)cerrarFallido();});
